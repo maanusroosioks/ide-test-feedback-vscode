@@ -2,8 +2,10 @@ import { ATTRIBUTES, scanCLike, type CLikeDialect } from '../../scanning';
 import type { SourceLanguageProfile } from '../types';
 
 // Anchored to the start of a line, on the mask, so array/indexer syntax can't pose as an attribute.
+// The test attribute may follow others in its list (`[Trait("a", "b"), Fact]`) and may be spelled
+// out (`[FactAttribute]`). NUnit's `[TestCaseSource]` makes a test without `[Test]`.
 const TEST_ATTRIBUTE =
-  /^[ \t]*\[[ \t]*(?:[A-Za-z_]\w*[ \t]*\.[ \t]*)*(DataTestMethod|TestMethod|TestCase|Theory|Fact|Test)\b/gm;
+  /^[ \t]*\[(?:[^\]\n]*,)?[ \t]*(?:[A-Za-z_]\w*[ \t]*\.[ \t]*)*(DataTestMethod|TestMethod|TestCaseSource|TestCase|Theory|Fact|Test)(?:Attribute)?\b/gm;
 
 const CSHARP_DIALECT: CLikeDialect = {
   typeKeywords: ['class', 'interface', 'record', 'struct', 'enum'],
@@ -19,7 +21,7 @@ export const csharpSource: SourceLanguageProfile = {
     blockComment: ['/*', '*/'],
     // Raw string literals (`"""…"""`) take backslashes literally.
     tripleQuoteEscapes: false,
-    stringPrefixes: { '@': 'verbatim', $: 'plain' },
+    stringPrefixes: { '@': 'verbatim', $: 'interpolated' },
   },
   scanDeclarations: (text, masked) => scanCLike(text, masked, CSHARP_DIALECT),
   // The optional `<...>` keeps `Assert.Throws<DivideByZeroException>(…)` from slipping through.

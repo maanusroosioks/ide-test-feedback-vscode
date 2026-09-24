@@ -26,6 +26,13 @@ export function sliceLines(text: string, startLine: number, endLine: number): st
   return text.slice(from, to).replace(/\r?\n$/, '');
 }
 
+/** Last index at or before `from` that isn't whitespace, or -1. */
+export function skipSpaceBackward(masked: string, from: number): number {
+  let i = from;
+  while (i >= 0 && /\s/.test(masked[i])) i--;
+  return i;
+}
+
 // ---------------------------------------------------------------- delimiters ----
 
 export function matchForward(masked: string, openIndex: number, open: string, close: string): number {

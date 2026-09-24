@@ -1,4 +1,4 @@
-import { ANNOTATIONS, scanCLike, type CLikeDialect } from '../../scanning';
+import { ANNOTATIONS, scanCLike, type CLikeDialect, type LexicalRules } from '../../scanning';
 import type { SourceLanguageProfile } from '../types';
 
 const TEST_ANNOTATION =
@@ -7,8 +7,8 @@ const TEST_ANNOTATION =
 interface JvmSourceOptions {
   extensions: string[];
   typeKeywords: string[];
-  /** False where `"""…"""` is a raw string. */
-  tripleQuoteEscapes: boolean;
+  /** Where the languages' strings and comments part ways. */
+  lexer: Omit<LexicalRules, 'lineComment' | 'blockComment'>;
   expressionBodyEnd: string;
   noopPatterns: RegExp[];
 }
@@ -23,7 +23,11 @@ function jvmSource(options: JvmSourceOptions): SourceLanguageProfile {
   };
   return {
     extensions: options.extensions,
-    lexer: { lineComment: '//', blockComment: ['/*', '*/'], tripleQuoteEscapes: options.tripleQuoteEscapes },
+    lexer: {
+      lineComment: '//',
+      blockComment: ['/*', '*/'],
+      ...options.lexer,
+    },
     scanDeclarations: (text, masked) => scanCLike(text, masked, dialect),
     assertions: /\bassert[A-Z_]\w*\s*\(|\bassert\s*\(|\bfail\s*\(|\bverify\s*\(|\bshould[A-Z]\w*\b/g,
     skipMarkers: [/@\s*(?:[\w.]*\.)?(?:Disabled|Ignore)\b/],
@@ -35,7 +39,7 @@ function jvmSource(options: JvmSourceOptions): SourceLanguageProfile {
 export const javaSource = jvmSource({
   extensions: ['.java'],
   typeKeywords: ['class', 'interface', 'record', 'enum'],
-  tripleQuoteEscapes: true,
+  lexer: { tripleQuoteEscapes: true },
   expressionBodyEnd: ';',
   noopPatterns: [/\bnull\b/g],
 });
@@ -44,7 +48,13 @@ export const kotlinSource = jvmSource({
   extensions: ['.kt', '.kts'],
   // `enum class` and `data class` are reached through `class`.
   typeKeywords: ['class', 'interface', 'object'],
-  tripleQuoteEscapes: false,
+  lexer: {
+    // `"""…"""` is a raw string.
+    tripleQuoteEscapes: false,
+    nestedBlockComments: true,
+    templateOpener: '${',
+    quotedIdentifier: '`',
+  },
   // Statements need no `;`, so an expression body ends at the line break.
   expressionBodyEnd: ';\n',
   noopPatterns: [/\bnull\b/g, /\bUnit\b/g],

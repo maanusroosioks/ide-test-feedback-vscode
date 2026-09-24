@@ -7,6 +7,7 @@ export interface TestDeclaration {
   /** 1-based inclusive. */
   endLine: number;
   markers: string[];
+  /** Every enclosing type's, outermost first: a skip on an outer class reaches its nested ones. */
   containerMarkers: string[];
   /** Excludes the signature and markers. */
   bodyText: string;

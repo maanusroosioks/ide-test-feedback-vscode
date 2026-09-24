@@ -61,6 +61,40 @@ describe('matchDeclaration', () => {
     expect(matchDeclaration(java, 'ambiguous', suite)?.container).toBe('CalculatorTest.InnerCases');
   });
 
+  it('kotlin: matches a backticked name that itself ends in parentheses', () => {
+    const declaration = { name: 'divide(a, b)', container: 'T', startLine: 1, endLine: 1, markers: [], containerMarkers: [], bodyText: '' };
+    expect(matchDeclaration([declaration], 'divide(a, b)()', 'T')?.name).toBe('divide(a, b)');
+  });
+
+  it('csharp: matches an xUnit display name carrying theory arguments', () => {
+    const declaration = {
+      name: 'A',
+      container: 'ÕunTests',
+      startLine: 1,
+      endLine: 1,
+      markers: ['[Theory(DisplayName = "adds two")]'],
+      containerMarkers: [],
+      bodyText: '',
+    };
+    expect(matchDeclaration([declaration, { ...declaration, markers: [] }], 'adds two(x: 1)', 'Ns.ÕunTests')).toBe(
+      declaration,
+    );
+  });
+
+  it('treats a suite starting with a non-ASCII capital as a type', () => {
+    const declaration = { name: 'A', container: 'ÕunTests', startLine: 1, endLine: 1, markers: [], containerMarkers: [], bodyText: '' };
+    const other = { ...declaration, container: 'Other' };
+    expect(matchDeclaration([declaration, other], 'Ns.ÕunTests.A', 'Ns.ÕunTests')).toBe(declaration);
+  });
+
+  it('csharp: uses a +-separated nested suite to disambiguate', () => {
+    const nested = [
+      { name: 'A', container: 'Outer.Inner', startLine: 1, endLine: 1, markers: [], containerMarkers: [], bodyText: '' },
+      { name: 'A', container: 'Outer.Other', startLine: 2, endLine: 2, markers: [], containerMarkers: [], bodyText: '' },
+    ];
+    expect(matchDeclaration(nested, 'Ns.Outer+Other.A', 'Ns.Outer+Other')?.container).toBe('Outer.Other');
+  });
+
   it('java: refuses to guess when the name is ambiguous and the suite does not help', () => {
     expect(matchDeclaration(java, 'ambiguous', undefined)).toBeUndefined();
   });

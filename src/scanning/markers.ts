@@ -1,4 +1,4 @@
-import { matchBackward, matchForward } from './text';
+import { matchBackward, matchForward, skipSpaceBackward } from './text';
 
 /** How a family of languages writes the markers (annotations, attributes) that precede a declaration. */
 export interface MarkerSyntax {
@@ -9,11 +9,7 @@ export interface MarkerSyntax {
   markerEnd(masked: string, start: number): number;
 }
 
-function skipSpaceBackward(masked: string, from: number): number {
-  let i = from;
-  while (i >= 0 && /\s/.test(masked[i])) i--;
-  return i;
-}
+const ANNOTATION_NAME = /[\p{L}\p{N}_.]/u;
 
 /** `@Test`, `@DisplayName("x")`, `@org.junit.jupiter.api.Test`. */
 export const ANNOTATIONS: MarkerSyntax = {
@@ -28,13 +24,18 @@ export const ANNOTATIONS: MarkerSyntax = {
       i = skipSpaceBackward(masked, open - 1);
     }
     let name = i;
-    while (name >= 0 && /[A-Za-z0-9_.]/.test(masked[name])) name--;
-    return name === i || name < 0 || masked[name] !== '@' ? undefined : name;
+    while (name >= 0 && ANNOTATION_NAME.test(masked[name])) name--;
+    if (name === i) return undefined;
+    let at = name;
+    while (at >= 0 && /[ \t]/.test(masked[at])) at--;
+    return at < 0 || masked[at] !== '@' ? undefined : at;
   },
 
   markerEnd(masked, start) {
     let j = start + 1;
-    while (j < masked.length && /[A-Za-z0-9_.]/.test(masked[j])) j++;
+    // `@ Test` is legal, if unusual.
+    while (j < masked.length && /[ \t]/.test(masked[j])) j++;
+    while (j < masked.length && ANNOTATION_NAME.test(masked[j])) j++;
     // Only spaces/tabs, never a newline: otherwise `@Test\nvoid foo()` eats the parameter list.
     let k = j;
     while (k < masked.length && /[ \t]/.test(masked[k])) k++;

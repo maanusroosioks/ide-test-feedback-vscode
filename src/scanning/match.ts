@@ -7,21 +7,19 @@ function trimTrailingGroup(value: string, open: string, close: string): string |
   return start < 0 ? undefined : value.slice(0, start).trimEnd();
 }
 
+/** Brackets and parens can nest and interleave, so strips whichever is currently trailing. */
+function trimTrailingGroups(name: string): string {
+  let value = name;
+  for (;;) {
+    const trimmed = trimTrailingGroup(value, '[', ']') ?? trimTrailingGroup(value, '(', ')');
+    if (trimmed === undefined) return value;
+    value = trimmed;
+  }
+}
+
 /** `test_add[2-3]`, `divideReturnsQuotient(int, int)[1]`, `Ns.Cls.Add_ReturnsSum`, `` `adds 2` ``. */
 export function normalizeTestName(testName: string): string {
-  let value = testName.trim();
-
-  // Brackets and parens can nest and interleave, so strip whichever is currently trailing.
-  for (;;) {
-    const withoutBrackets = trimTrailingGroup(value, '[', ']');
-    if (withoutBrackets !== undefined) {
-      value = withoutBrackets;
-      continue;
-    }
-    const withoutParens = trimTrailingGroup(value, '(', ')');
-    if (withoutParens === undefined) break;
-    value = withoutParens;
-  }
+  let value = trimTrailingGroups(testName.trim());
 
   // Only after the argument list is gone, since dotnet theory arguments contain dots.
   // A space means this is a display name, not a qualified name, so leave it whole.
@@ -33,11 +31,9 @@ export function normalizeTestName(testName: string): string {
   return value.replace(/^`/, '').replace(/`$/, '');
 }
 
+/** Nested types are joined by `$` on the JVM and `+` in .NET. */
 function simpleName(qualified: string | undefined): string | undefined {
-  if (!qualified) return undefined;
-  const segments = qualified.split('.');
-  const last = segments[segments.length - 1].split('$');
-  return last[last.length - 1] || undefined;
+  return qualified?.split(/[.$+]/).pop() || undefined;
 }
 
 const DISPLAY_NAME = /DisplayName\s*[=(]\s*"((?:[^"\\]|\\.)*)"/;
@@ -71,7 +67,7 @@ export function matchDeclaration(
   const normalized = normalizeTestName(testName);
   const suite = simpleName(testSuite);
   // A pytest module suite (`test_calculator`) names a file, not a class.
-  const suiteIsType = suite !== undefined && /^[A-Z]/.test(suite);
+  const suiteIsType = suite !== undefined && /^\p{Lu}/u.test(suite);
   const inContainer =
     suite === undefined
       ? []
@@ -89,9 +85,20 @@ export function matchDeclaration(
       declarations.filter(
         (declaration) => declaration.name.toLowerCase() === normalized.toLowerCase(),
       ),
+    // A backticked name can end in a group of its own, `divide(a, b)`, which normalizing strips too.
+    () =>
+      declarations.filter(
+        (declaration) =>
+          raw.startsWith(declaration.name) &&
+          trimTrailingGroups(raw.slice(declaration.name.length)) === '',
+      ),
+    // xUnit appends a theory's arguments to its display name: `adds two(x: 1)`.
     () =>
       declarations.filter((declaration) =>
-        declaration.markers.some((marker) => displayNameOf(marker) === raw),
+        declaration.markers.some((marker) => {
+          const displayName = displayNameOf(marker);
+          return displayName === raw || displayName === normalized;
+        }),
       ),
   ];
 

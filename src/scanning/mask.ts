@@ -1,10 +1,19 @@
 export interface LexicalRules {
   lineComment: string;
   blockComment?: [open: string, close: string];
+  /** Kotlin's block comments nest; Java's and C#'s end at the first close. */
+  nestedBlockComments?: boolean;
   /** Kotlin raw strings and C# raw string literals take backslashes literally. */
   tripleQuoteEscapes: boolean;
-  /** Characters that may prefix a quote, e.g. C#'s `@"…"` and `$"…"`. A `verbatim` prefix makes `""` the escape. */
-  stringPrefixes?: Record<string, 'verbatim' | 'plain'>;
+  /**
+   * Characters that may prefix a quote, in any combination: C#'s `@"…"` and `$"…"`, Python's
+   * `rf"…"`. A `verbatim` prefix makes `""` the escape; an `interpolated` one opens code at `{`.
+   */
+  stringPrefixes?: Record<string, 'verbatim' | 'interpolated' | 'plain'>;
+  /** Opens code inside any double-quoted string, e.g. Kotlin's `${`. */
+  templateOpener?: string;
+  /** Kotlin's backticked names, kept as they are but skipped whole so a `'` in `doesn't` opens no literal. */
+  quotedIdentifier?: string;
 }
 
 // ----------------------------------------------------------------- literals ----
@@ -15,16 +24,42 @@ interface Literal {
   end: number;
 }
 
+interface StringStyle {
+  verbatim: boolean;
+  /** Where code starts inside the string, if anywhere. */
+  hole?: string;
+}
+
 function endOfLine(text: string, from: number): number {
   const newline = text.indexOf('\n', from);
   return newline < 0 ? text.length : newline;
 }
 
-function quotedLiteral(text: string, quoteIndex: number, rules: LexicalRules): Literal {
+/** End (exclusive) of code opened inside a string: it may hold braces and strings of its own. */
+function holeEnd(text: string, from: number, rules: LexicalRules): number {
+  let depth = 1;
+  let i = from;
+  while (i < text.length) {
+    const literal = literalAt(text, i, rules);
+    if (literal) {
+      i = Math.max(literal.end, i + 1);
+      continue;
+    }
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}' && --depth === 0) return i + 1;
+    i++;
+  }
+  return text.length;
+}
+
+function quotedLiteral(text: string, quoteIndex: number, rules: LexicalRules, style: StringStyle): Literal {
   const quote = text[quoteIndex];
-  const triple = text.startsWith(quote.repeat(3), quoteIndex);
+  // A verbatim string's `""` is an escaped quote, never a triple delimiter.
+  const triple = !style.verbatim && text.startsWith(quote.repeat(3), quoteIndex);
   const delimiter = triple ? quote.repeat(3) : quote;
-  const escapes = !triple || rules.tripleQuoteEscapes;
+  const escapes = !style.verbatim && (!triple || rules.tripleQuoteEscapes);
+  const singleLine = !triple && !style.verbatim;
+  const hole = style.hole;
   const contentStart = quoteIndex + delimiter.length;
 
   let i = contentStart;
@@ -33,11 +68,26 @@ function quotedLiteral(text: string, quoteIndex: number, rules: LexicalRules): L
       i += 2;
       continue;
     }
+    if (hole && text.startsWith(hole, i)) {
+      // A doubled opener is C#'s escaped brace, `{{`.
+      if (text.startsWith(hole, i + hole.length)) {
+        i += 2 * hole.length;
+        continue;
+      }
+      const end = holeEnd(text, i + hole.length, rules);
+      // A hole left open mid-edit must not carry a one-line string past its line.
+      i = singleLine && end > endOfLine(text, i) ? i + hole.length : end;
+      continue;
+    }
     if (text.startsWith(delimiter, i)) {
+      if (style.verbatim && text[i + 1] === quote) {
+        i += 2;
+        continue;
+      }
       return { contentStart, contentEnd: i, end: i + delimiter.length };
     }
     // An unterminated single-line string must not swallow the rest of the file.
-    if (!triple && text[i] === '\n') {
+    if (singleLine && text[i] === '\n') {
       return { contentStart, contentEnd: i, end: i };
     }
     i++;
@@ -45,41 +95,44 @@ function quotedLiteral(text: string, quoteIndex: number, rules: LexicalRules): L
   return { contentStart, contentEnd: text.length, end: text.length };
 }
 
-function verbatimLiteral(text: string, quoteIndex: number): Literal {
-  const contentStart = quoteIndex + 1;
-  let i = contentStart;
-  while (i < text.length) {
-    if (text[i] === '"') {
-      if (text[i + 1] === '"') {
-        i += 2;
-        continue;
-      }
-      return { contentStart, contentEnd: i, end: i + 1 };
+function literalAt(text: string, index: number, rules: LexicalRules): Literal | undefined {
+  const prefixes = rules.stringPrefixes ?? {};
+  let quoteIndex = index;
+  let verbatim = false;
+  let interpolated = false;
+
+  // A prefix starts a token: the `f` closing `if"a"` is part of the keyword.
+  if (prefixes[text[index]] !== undefined && !/[\p{L}\p{N}_]/u.test(text[index - 1] ?? '')) {
+    while (prefixes[text[quoteIndex]] !== undefined) {
+      const kind = prefixes[text[quoteIndex++]];
+      verbatim ||= kind === 'verbatim';
+      interpolated ||= kind === 'interpolated';
     }
-    i++;
   }
-  return { contentStart, contentEnd: text.length, end: text.length };
+
+  const quote = text[quoteIndex];
+  if (quote !== '"' && quote !== "'") return undefined;
+  const hole = interpolated ? '{' : quote === '"' ? rules.templateOpener : undefined;
+  return quotedLiteral(text, quoteIndex, rules, { verbatim, hole });
 }
 
-function literalAt(text: string, index: number, rules: LexicalRules): Literal | undefined {
-  const char = text[index];
-  const prefixes = rules.stringPrefixes;
+// ----------------------------------------------------------------- comments ----
 
-  if (prefixes?.[char] !== undefined) {
-    let i = index;
-    let verbatim = false;
-    while (prefixes[text[i]] !== undefined) {
-      if (prefixes[text[i]] === 'verbatim') verbatim = true;
+function blockCommentEnd(text: string, from: number, [open, close]: [string, string], nested: boolean): number {
+  let depth = 0;
+  let i = from;
+  while (i < text.length) {
+    if (text.startsWith(open, i) && (depth === 0 || nested)) {
+      depth++;
+      i += open.length;
+    } else if (text.startsWith(close, i)) {
+      i += close.length;
+      if (--depth === 0) return i;
+    } else {
       i++;
     }
-    if (text[i] !== '"') return undefined;
-    return verbatim ? verbatimLiteral(text, i) : quotedLiteral(text, i, rules);
   }
-
-  if (char === '"' || char === "'") {
-    return quotedLiteral(text, index, rules);
-  }
-  return undefined;
+  return text.length;
 }
 
 export function maskWith(text: string, rules: LexicalRules): string {
@@ -99,11 +152,15 @@ export function maskWith(text: string, rules: LexicalRules): string {
       continue;
     }
     if (rules.blockComment && text.startsWith(rules.blockComment[0], i)) {
-      const [open, close] = rules.blockComment;
-      const closeAt = text.indexOf(close, i + open.length);
-      const end = closeAt < 0 ? text.length : closeAt + close.length;
+      const end = blockCommentEnd(text, i, rules.blockComment, rules.nestedBlockComments ?? false);
       blank(i, end);
       i = end;
+      continue;
+    }
+
+    if (rules.quotedIdentifier && text[i] === rules.quotedIdentifier) {
+      const close = text.indexOf(rules.quotedIdentifier, i + 1);
+      i = close < 0 || close > endOfLine(text, i) ? i + 1 : close + 1;
       continue;
     }
 
