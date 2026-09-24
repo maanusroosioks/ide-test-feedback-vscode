@@ -3,6 +3,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import type { NormalizedTestCase, TestStatus } from '../../core/types';
+import { describeError } from '../../core/errors';
 import { removeDir } from '../../util/shell';
 import { parseReportFile } from './report-file';
 
@@ -225,7 +226,7 @@ export async function parseJUnitXmlDirectory(
       try {
         return await parseJUnitXmlFile(path);
       } catch (error) {
-        opts.onWarning?.(error instanceof Error ? error.message : String(error));
+        opts.onWarning?.(describeError(error));
         return [];
       }
     }),

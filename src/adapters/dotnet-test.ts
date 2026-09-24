@@ -20,7 +20,7 @@ export const dotnetTestAdapter = defineAdapter({
     }
   },
 
-  async prepare(folderPath, opts) {
+  async prepare(_folderPath, opts) {
     const reportPath = tempReportPath('dotnet-test', 'trx');
     const baseCommand = opts.commandOverride ?? 'dotnet test';
     const logger = `--logger "trx;LogFileName=${basename(reportPath)}"`;

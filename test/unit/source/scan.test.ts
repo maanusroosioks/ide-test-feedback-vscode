@@ -24,7 +24,6 @@ describe('languageForFile', () => {
 
   it('falls back to the adapter language when the extension is unknown', () => {
     expect(languageForFile('/p/FooTest.groovy', 'java')).toBe('java');
-    expect(languageForFile('/p/FooTest.groovy', 'elixir')).toBeUndefined();
   });
 });
 

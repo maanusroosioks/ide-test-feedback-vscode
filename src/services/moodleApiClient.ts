@@ -1,10 +1,11 @@
+import type { GetAccessTokenOptions } from '../auth/authService';
 import type { TestRunRequest } from './httpTypes';
 import { HttpError, NetworkError, TimeoutError } from './errors';
 
 export interface MoodleApiClientOptions {
   getBaseUrl: () => string;
   getTimeoutMs: () => number;
-  getAccessToken: (opts?: { forceRefresh?: boolean }) => Promise<string>;
+  getAccessToken: (opts?: GetAccessTokenOptions) => Promise<string>;
 }
 
 export interface SubmitResult {
@@ -62,7 +63,7 @@ export class MoodleApiClient {
       try {
         body = JSON.parse(bodyText);
       } catch {
-        body = bodyText;
+        // Not JSON: keep the raw text.
       }
     }
 

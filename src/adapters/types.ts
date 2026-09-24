@@ -1,4 +1,4 @@
-import type { NormalizedTestRun } from '../core/types';
+import type { NormalizedTestRun, RunLanguage } from '../core/types';
 import type { Logger } from '../core/ports';
 import type { OutputSink } from '../util/shell';
 
@@ -24,7 +24,7 @@ export interface AdapterRunResult {
 export interface TestRunnerAdapter {
   readonly id: string;
   readonly displayName: string;
-  readonly language: string;
+  readonly language: RunLanguage;
   detect(folderPath: string): Promise<boolean>;
   run(folderPath: string, opts: RunOptions): Promise<AdapterRunResult>;
 }

@@ -15,10 +15,6 @@ export class AdapterRegistry {
     this.adapters.push(adapter);
   }
 
-  getAll(): TestRunnerAdapter[] {
-    return [...this.adapters];
-  }
-
   async detectAdapters(folderPath: string): Promise<TestRunnerAdapter[]> {
     const matches: TestRunnerAdapter[] = [];
     for (const adapter of this.adapters) {

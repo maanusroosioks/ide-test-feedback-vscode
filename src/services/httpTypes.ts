@@ -19,7 +19,21 @@ export const REQUEST_LIMITS = {
   durationMs: 2_147_483_647,
 } as const;
 
-export const ASSIGNMENT_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
+const ASSIGNMENT_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/** Why the gateway would reject `assignmentKey`, or `undefined` if it is acceptable. */
+export function assignmentKeyProblem(assignmentKey: string): string | undefined {
+  if (!assignmentKey.trim()) {
+    return 'The assignment key must not be blank.';
+  }
+  if (assignmentKey.length > REQUEST_LIMITS.assignmentKey) {
+    return `The assignment key must be at most ${REQUEST_LIMITS.assignmentKey} characters.`;
+  }
+  if (!ASSIGNMENT_KEY_PATTERN.test(assignmentKey)) {
+    return "The assignment key may only contain letters, digits, '_' and '-'.";
+  }
+  return undefined;
+}
 
 /**
  * Omitted entirely when the test was not found in the project's source. `filePath` alone means the

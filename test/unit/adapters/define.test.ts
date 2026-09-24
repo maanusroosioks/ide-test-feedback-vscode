@@ -8,7 +8,7 @@ function adapterThatPrepares(prepared: Partial<PreparedRun>) {
   return defineAdapter({
     id: 'fake',
     displayName: 'Fake Runner',
-    language: 'fictional',
+    language: 'python',
     detect: async () => true,
     prepare: async () => ({
       command: NOOP_COMMAND,
@@ -27,7 +27,7 @@ describe('defineAdapter', () => {
     const result = await adapter.run(process.cwd(), {});
 
     expect(result.run.adapterId).toBe('fake');
-    expect(result.run.language).toBe('fictional');
+    expect(result.run.language).toBe('python');
     expect(result.run.results).toHaveLength(1);
     expect(result.reportError).toBeUndefined();
     expect(result.run.finishedAt).toBeGreaterThanOrEqual(result.run.startedAt);

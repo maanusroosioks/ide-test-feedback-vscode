@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { AuthService } from '../auth/authService';
+import { describeError } from '../core/errors';
 
 export function registerLoginCommand(context: vscode.ExtensionContext, authService: AuthService): void {
   context.subscriptions.push(
@@ -8,9 +9,7 @@ export function registerLoginCommand(context: vscode.ExtensionContext, authServi
         await authService.login();
         void vscode.window.showInformationMessage('Signed in with Microsoft.');
       } catch (error) {
-        void vscode.window.showErrorMessage(
-          `Sign-in failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        void vscode.window.showErrorMessage(`Sign-in failed: ${describeError(error)}`);
       }
     }),
   );

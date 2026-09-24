@@ -1,12 +1,13 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TestLocationResolver, parseStackFrames } from '../../../src/capture/location';
+import type { RunLanguage } from '../../../src/core/types';
 
 const ROOT = resolve('/work/proj');
 
 /** Builds a resolver whose filesystem is exactly the given relative paths. */
 function resolverFor(
-  language: string,
+  language: RunLanguage,
   files: string[],
   dirs: string[] = [],
   root = ROOT,

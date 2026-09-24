@@ -1,10 +1,6 @@
 import { MoodleSubmitError } from '../core/errors';
 
-export class TimeoutError extends MoodleSubmitError {
-  constructor(message: string) {
-    super(message);
-  }
-}
+export class TimeoutError extends MoodleSubmitError {}
 
 export class NetworkError extends MoodleSubmitError {
   constructor(

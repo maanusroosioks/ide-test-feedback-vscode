@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { runCommand } from '../util/shell';
 import { MoodleSubmitError } from './errors';
 
+export const WORKSPACE_CONFIG_FILE_NAME = '.moodle-submit.json';
+
 export interface SubmissionMetadata {
   assignmentKey: string;
   projectName?: string;
@@ -25,12 +27,7 @@ export class InvalidWorkspaceConfigError extends MoodleSubmitError {
   }
 }
 
-export interface WorkspaceConfigFile {
-  assignmentKey?: string;
-  projectName?: string;
-  commitHash?: string;
-  repoUrl?: string;
-}
+export type WorkspaceConfigFile = Partial<SubmissionMetadata>;
 
 export interface MetadataSources {
   workspaceFile?: WorkspaceConfigFile;
@@ -53,8 +50,6 @@ export function resolveSubmissionMetadata(sources: MetadataSources): SubmissionM
     repoUrl: sources.workspaceFile?.repoUrl ?? sources.gitRemoteUrl,
   };
 }
-
-const WORKSPACE_CONFIG_FILE_NAME = '.moodle-submit.json';
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;

@@ -2,7 +2,7 @@ import type { NormalizedTestRun } from './types';
 import type { SubmissionMetadata } from './submissionMetadata';
 import type { TestEvidencePayload, TestSource, TestSourceFile } from '../capture/evidence';
 import {
-  ASSIGNMENT_KEY_PATTERN,
+  assignmentKeyProblem,
   REQUEST_LIMITS,
   type TestResultRequest,
   type TestRunRequest,
@@ -21,7 +21,6 @@ function truncate(value: string | undefined, max: number): string | undefined {
   if (value === undefined) return undefined;
   return value.length > max ? value.slice(0, max) : value;
 }
-
 
 function sanitizeForParamText(value: string | undefined): string | undefined {
   return value === undefined ? undefined : value.replace(/[<>]/g, '');
@@ -49,16 +48,9 @@ function timingFields(run: NormalizedTestRun): Pick<TestRunRequest, 'startedAt' 
 }
 
 function validateAssignmentKey(assignmentKey: string): void {
-  if (!assignmentKey.trim()) {
-    throw new InvalidPayloadError('assignmentKey must not be blank.');
-  }
-  if (assignmentKey.length > REQUEST_LIMITS.assignmentKey) {
-    throw new InvalidPayloadError(
-      `assignmentKey must be at most ${REQUEST_LIMITS.assignmentKey} characters.`,
-    );
-  }
-  if (!ASSIGNMENT_KEY_PATTERN.test(assignmentKey)) {
-    throw new InvalidPayloadError("assignmentKey may only contain letters, digits, '_' and '-'.");
+  const problem = assignmentKeyProblem(assignmentKey);
+  if (problem) {
+    throw new InvalidPayloadError(problem);
   }
 }
 
@@ -108,7 +100,8 @@ export function buildTestRunRequest(
     };
   });
 
-  const testFiles = evidence?.files.slice(0, REQUEST_LIMITS.testFiles).map(toSourceFileRequest);
+  // Already capped at REQUEST_LIMITS.testFiles by the evidence collector.
+  const testFiles = evidence?.files.map(toSourceFileRequest);
 
   return {
     assignmentKey: metadata.assignmentKey,

@@ -9,9 +9,10 @@ import {
   type DeclaredSource,
   type FileSource,
   type TestEvidence,
+  type TestSourceKind,
 } from '../../../src/capture/evidence';
 import { sliceLines } from '../../../src/source';
-import type { NormalizedTestCase, NormalizedTestRun, TestSourceKind } from '../../../src/core/types';
+import type { NormalizedTestCase, NormalizedTestRun, RunLanguage } from '../../../src/core/types';
 
 const FOLDER = resolve('/project');
 const PYTHON_SOURCE = readFileSync(
@@ -33,7 +34,7 @@ function sourcesOf(evidence: TestEvidence): AnySource[] {
   return evidence.payload.sources as AnySource[];
 }
 
-function run(results: NormalizedTestCase[], language = 'python'): NormalizedTestRun {
+function run(results: NormalizedTestCase[], language: RunLanguage = 'python'): NormalizedTestRun {
   return { adapterId: 'pytest', language, startedAt: 1000, finishedAt: 2000, results };
 }
 
@@ -174,7 +175,12 @@ describe('collectTestEvidence — source capture', () => {
     const { evidence } = await collect(run(results), files);
 
     expect(evidence.payload.files).toHaveLength(200);
-    expect(sourcesOf(evidence).every((source) => source.kind === 'TEST')).toBe(true);
+    const listed = new Set(evidence.payload.files.map((file) => file.path));
+    const sources = sourcesOf(evidence);
+    expect(sources.filter((source) => source.kind === 'TEST')).toHaveLength(200);
+    expect(sources.filter((source) => source.kind === 'NONE')).toHaveLength(5);
+    // A source must never point at a file that was left out of the payload.
+    expect(sources.every((source) => source.kind === 'NONE' || listed.has(source.filePath as string))).toBe(true);
   });
 });
 

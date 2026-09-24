@@ -7,8 +7,7 @@ import { dotnetTestAdapter } from './adapters/dotnet-test';
 import { AuthService } from './auth/authService';
 import { MoodleApiClient } from './services/moodleApiClient';
 import { getAuthScopes, getRequestTimeoutMs, getServiceUrl } from './config/settings';
-import { registerRunAndSubmitCommand } from './commands/runAndSubmit';
-import { registerRunTestsOnlyCommand } from './commands/runTestsOnly';
+import { registerRunCommand } from './commands/run';
 import { registerLoginCommand } from './commands/login';
 import { registerLogoutCommand } from './commands/logout';
 import { registerConfigureAssignmentCommand } from './commands/configureAssignment';
@@ -44,8 +43,8 @@ export function activate(context: vscode.ExtensionContext): void {
     status,
   });
 
-  registerRunAndSubmitCommand(context, testControl, logger, status);
-  registerRunTestsOnlyCommand(context, testControl, logger, status);
+  registerRunCommand(context, 'moodleSubmit.runAndSubmit', true, testControl, logger, status);
+  registerRunCommand(context, 'moodleSubmit.runTestsOnly', false, testControl, logger, status);
   registerLoginCommand(context, authService);
   registerLogoutCommand(context, authService);
   registerConfigureAssignmentCommand(context, authService);

@@ -14,3 +14,9 @@ export class CancelledError extends MoodleSubmitError {
     super('Run cancelled.');
   }
 }
+
+export function describeError(error: unknown): string {
+  if (error instanceof MoodleSubmitError) return error.userMessage;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}

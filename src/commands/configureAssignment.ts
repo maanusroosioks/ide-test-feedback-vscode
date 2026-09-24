@@ -9,11 +9,10 @@ import {
   setAssignmentKey,
   setServiceUrl,
 } from '../config/settings';
-import { ASSIGNMENT_KEY_PATTERN, REQUEST_LIMITS } from '../services/httpTypes';
+import { assignmentKeyProblem } from '../services/httpTypes';
+import { WORKSPACE_CONFIG_FILE_NAME } from '../core/submissionMetadata';
 import { pathExists } from '../util/shell';
 import { refreshConfiguredContext } from '../ui/onboarding';
-
-const WORKSPACE_CONFIG_FILE_NAME = '.moodle-submit.json';
 
 function validateUrl(value: string): string | undefined {
   const trimmed = value.trim();
@@ -35,16 +34,7 @@ function validateUrl(value: string): string | undefined {
 /** Blank is allowed: the setting is only a fallback for projects without a .moodle-submit.json. */
 function validateAssignmentKey(value: string): string | undefined {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  if (trimmed.length > REQUEST_LIMITS.assignmentKey) {
-    return `The assignment key must be at most ${REQUEST_LIMITS.assignmentKey} characters.`;
-  }
-  if (!ASSIGNMENT_KEY_PATTERN.test(trimmed)) {
-    return "The assignment key may only contain letters, digits, '_' and '-'.";
-  }
-  return undefined;
+  return trimmed ? assignmentKeyProblem(trimmed) : undefined;
 }
 
 async function reportReachability(baseUrl: string): Promise<void> {

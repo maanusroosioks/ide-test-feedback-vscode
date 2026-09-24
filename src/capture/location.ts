@@ -1,6 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { pathExists } from '../util/shell';
+import type { RunLanguage } from '../core/types';
 
 export interface SourceLocation {
   file: string;
@@ -17,13 +18,13 @@ export interface StackFrame {
 export type ExistsFn = (path: string) => Promise<boolean>;
 export type ListDirsFn = (path: string) => Promise<string[]>;
 
-const SOURCE_EXTENSIONS: Record<string, string[]> = {
+const SOURCE_EXTENSIONS: Record<RunLanguage, string[]> = {
   java: ['.java', '.kt', '.kts', '.scala', '.groovy'],
   python: ['.py'],
   csharp: ['.cs'],
 };
 
-const SOURCE_ROOTS: Record<string, string[]> = {
+const SOURCE_ROOTS: Record<RunLanguage, string[]> = {
   java: [
     'src/test/java',
     'src/main/java',
@@ -37,8 +38,6 @@ const SOURCE_ROOTS: Record<string, string[]> = {
   python: ['', 'src', 'tests', 'test'],
   csharp: ['', 'src'],
 };
-
-const DEFAULT_ROOTS = ['', 'src'];
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -63,12 +62,8 @@ const PYTEST_REPORT_FRAME = /^\s*([^\s:][^:\n]*\.py):(\d+):/gm;
 /** `at Ns.FooTests.Bar() in C:\src\FooTests.cs:line 42`. */
 const DOTNET_FRAME = /\bin\s+(.+?):line\s+(\d+)/g;
 
-function extensionsFor(language: string): string[] {
-  return SOURCE_EXTENSIONS[language] ?? ['.java', '.py', '.cs', '.kt', '.ts', '.js'];
-}
-
-function looksLikeSource(file: string, language: string): boolean {
-  return extensionsFor(language).some((ext) => file.toLowerCase().endsWith(ext));
+function looksLikeSource(file: string, language: RunLanguage): boolean {
+  return SOURCE_EXTENSIONS[language].some((ext) => file.toLowerCase().endsWith(ext));
 }
 
 function hasDirectorySegment(file: string): boolean {
@@ -106,37 +101,39 @@ function collect(
   }
 }
 
-export function parseStackFrames(stackTrace: string, language: string): StackFrame[] {
+export function parseStackFrames(stackTrace: string, language: RunLanguage): StackFrame[] {
   const found: IndexedFrame[] = [];
-  const tryAll = !(language in SOURCE_EXTENSIONS);
 
-  if (tryAll || language === 'java') {
-    collect(
-      JVM_FRAME,
-      stackTrace,
-      (match) => {
-        const file = match[2];
-        if (!looksLikeSource(file, 'java')) return undefined;
-        return { className: jvmClassName(match[1]), file, line: Number(match[3]) };
-      },
-      found,
-    );
-  }
-  if (tryAll || language === 'python') {
-    const toFrame = (match: RegExpExecArray): StackFrame => ({
-      file: match[1],
-      line: Number(match[2]),
-    });
-    collect(PYTHON_TRACEBACK_FRAME, stackTrace, toFrame, found);
-    collect(PYTEST_REPORT_FRAME, stackTrace, toFrame, found);
-  }
-  if (tryAll || language === 'csharp') {
-    collect(
-      DOTNET_FRAME,
-      stackTrace,
-      (match) => ({ file: match[1].trim(), line: Number(match[2]) }),
-      found,
-    );
+  switch (language) {
+    case 'java':
+      collect(
+        JVM_FRAME,
+        stackTrace,
+        (match) => {
+          const file = match[2];
+          if (!looksLikeSource(file, 'java')) return undefined;
+          return { className: jvmClassName(match[1]), file, line: Number(match[3]) };
+        },
+        found,
+      );
+      break;
+    case 'python': {
+      const toFrame = (match: RegExpExecArray): StackFrame => ({
+        file: match[1],
+        line: Number(match[2]),
+      });
+      collect(PYTHON_TRACEBACK_FRAME, stackTrace, toFrame, found);
+      collect(PYTEST_REPORT_FRAME, stackTrace, toFrame, found);
+      break;
+    }
+    case 'csharp':
+      collect(
+        DOTNET_FRAME,
+        stackTrace,
+        (match) => ({ file: match[1].trim(), line: Number(match[2]) }),
+        found,
+      );
+      break;
   }
 
   return found
@@ -178,7 +175,7 @@ export class TestLocationResolver {
 
   constructor(
     private readonly folderPath: string,
-    private readonly language: string,
+    private readonly language: RunLanguage,
     deps: TestLocationResolverDeps = {},
   ) {
     this.exists = deps.exists ?? pathExists;
@@ -252,7 +249,7 @@ export class TestLocationResolver {
   }
 
   private suiteCandidates(testSuite: string): string[] {
-    const extensions = extensionsFor(this.language);
+    const extensions = SOURCE_EXTENSIONS[this.language];
     const candidates = extensions.map((ext) => `${this.packagePath(testSuite)}${ext}`);
 
     const segments = testSuite.split('$')[0].split('.');
@@ -271,7 +268,7 @@ export class TestLocationResolver {
   }
 
   private async probeIn(modules: string[], relatives: string[]): Promise<string | undefined> {
-    const roots = SOURCE_ROOTS[this.language] ?? DEFAULT_ROOTS;
+    const roots = SOURCE_ROOTS[this.language];
     for (const module of modules) {
       for (const root of roots) {
         for (const relative of relatives) {

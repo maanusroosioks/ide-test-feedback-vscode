@@ -25,13 +25,6 @@ export const declarations = {
   csharp: scan('csharp/CalculatorTests.cs', 'csharp'),
 };
 
-export const sources = {
-  python: fixture('python/test_calculator.py'),
-  java: fixture('java/CalculatorTest.java'),
-  kotlin: fixture('kotlin/CalculatorTest.kt'),
-  csharp: fixture('csharp/CalculatorTests.cs'),
-};
-
 /** Fails the test rather than silently picking one when a fixture has same-named declarations. */
 export function declarationNamed(found: TestDeclaration[], name: string): TestDeclaration {
   const hits = found.filter((declaration) => declaration.name === name);

@@ -11,7 +11,7 @@ export const pytestAdapter = defineAdapter({
 
   detect: (folderPath) => anyExists(folderPath, DETECT_FILES),
 
-  async prepare(folderPath, opts) {
+  async prepare(_folderPath, opts) {
     const reportPath = tempReportPath('pytest', 'xml');
     const pythonExe = process.platform === 'win32' ? 'python' : 'python3';
     const baseCommand = opts.commandOverride ?? `${pythonExe} -m pytest`;

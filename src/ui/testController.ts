@@ -6,7 +6,7 @@ import {
   getSourceCaptureSettings,
   getWarnOnSuspiciousTests,
 } from '../config/settings';
-import { TestLocationResolver } from '../capture/location';
+import { TestLocationResolver, type SourceLocation } from '../capture/location';
 import {
   collectTestEvidence,
   describeSuspiciousTests,
@@ -25,7 +25,8 @@ import { runTests, summarize } from '../core/testRunner';
 import { pickAdapter, resolveWorkspaceFolder } from './workspacePicker';
 import { submitRun } from '../core/submitRun';
 import type { NormalizedTestCase, NormalizedTestRun } from '../core/types';
-import { describeError, handleCommandError } from './errorHandling';
+import { describeError } from '../core/errors';
+import { handleCommandError } from './errorHandling';
 import { ensureConfigured } from './onboarding';
 import type { MoodleApiClient } from '../services/moodleApiClient';
 import { confirmDegradedRun, describeFinding } from './degradedRunPrompt';
@@ -72,6 +73,12 @@ function idsOf(collection: vscode.TestItemCollection): string[] {
   const ids: string[] = [];
   collection.forEach((item) => ids.push(item.id));
   return ids;
+}
+
+/** Stack-trace lines are 1-based; editor ranges are 0-based. */
+function lineRange(line: number): vscode.Range {
+  const zeroBased = Math.max(0, line - 1);
+  return new vscode.Range(zeroBased, 0, zeroBased, 0);
 }
 
 function failureMessage(testCase: NormalizedTestCase): string {
@@ -225,8 +232,7 @@ export function registerTestController(
         location ? vscode.Uri.file(location.file) : undefined,
       );
       if (location?.line !== undefined) {
-        const line = Math.max(0, location.line - 1);
-        item.range = new vscode.Range(line, 0, line, 0);
+        item.range = lineRange(location.line);
       }
       liveTests.set(suiteId, (liveTests.get(suiteId) ?? new Set()).add(testId));
       remembered.push({ suite, name: testCase.testName, file: location?.file });
@@ -258,7 +264,7 @@ export function registerTestController(
     testRun: vscode.TestRun,
     item: vscode.TestItem,
     testCase: NormalizedTestCase,
-    location: { file: string; line?: number } | undefined,
+    location: SourceLocation | undefined,
   ): void {
     switch (testCase.status) {
       case 'PASSED':
@@ -270,10 +276,9 @@ export function registerTestController(
       default: {
         const message = new vscode.TestMessage(failureMessage(testCase));
         if (location?.line !== undefined) {
-          const line = Math.max(0, location.line - 1);
           message.location = new vscode.Location(
             vscode.Uri.file(location.file),
-            new vscode.Range(line, 0, line, 0),
+            lineRange(location.line),
           );
         }
         if (testCase.status === 'FAILED') {

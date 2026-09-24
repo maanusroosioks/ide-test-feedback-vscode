@@ -6,7 +6,7 @@ function fakeAdapter(id: string, matches: boolean): TestRunnerAdapter {
   return {
     id,
     displayName: id,
-    language: 'test',
+    language: 'python',
     detect: async () => matches,
     run: async () => {
       throw new Error('not used in this test');

@@ -1,5 +1,3 @@
-// The UI layer hands in an already-constructed TestLocationResolver.
-
 import { readFile } from 'node:fs/promises';
 import { basename, isAbsolute, relative, sep } from 'node:path';
 import type { TestLocationResolver } from './location';
@@ -36,6 +34,13 @@ export interface DeclaredSource {
 }
 
 export type TestSource = UnlocatedSource | FileSource | DeclaredSource;
+
+/**
+ * How far the test was resolved in the project's source, independent of whether its file's content
+ * was captured. `TEST` — the declaration, located by line range within its file. `FILE` — only the file itself.
+ * `NONE` — not found at all, so there is nothing but the framework's own report.
+ */
+export type TestSourceKind = TestSource['kind'];
 
 export interface TestSourceFile {
   /** Workspace-relative, forward slashes. The join key from `TestSource.filePath`. */
@@ -84,7 +89,7 @@ export interface SuspiciousTest {
 interface SourceFile {
   relativePath: string;
   text: string;
-  language?: SourceLanguage;
+  language: SourceLanguage;
   declarations: TestDeclaration[];
 }
 
@@ -140,7 +145,7 @@ export async function collectTestEvidence(
         relativePath: toRelative(options.folderPath, absolutePath),
         text,
         language,
-        declarations: language ? scanTestDeclarations(text, language) : [],
+        declarations: scanTestDeclarations(text, language),
       };
     } catch {
       file = undefined;
@@ -162,25 +167,24 @@ export async function collectTestEvidence(
       continue;
     }
 
-    // An unknown language means nothing was scanned, so there is nothing to match against.
-    const language = file.language;
-    let declaration: TestDeclaration | undefined;
-    let signals = unlocatedIntegrity();
-    if (language) {
-      declaration = matchDeclaration(file.declarations, testCase.testName, testCase.testSuite, location?.line);
-      if (declaration) signals = analyzeDeclaration(declaration, language);
+    const declaration = matchDeclaration(
+      file.declarations,
+      testCase.testName,
+      testCase.testSuite,
+      location?.line,
+    );
+    if (!declaration) {
+      record({ kind: 'FILE', filePath: file.relativePath }, unlocatedIntegrity());
+      continue;
     }
-
     record(
-      declaration
-        ? {
-            kind: 'TEST',
-            filePath: file.relativePath,
-            startLine: declaration.startLine,
-            endLine: declaration.endLine,
-          }
-        : { kind: 'FILE', filePath: file.relativePath },
-      signals,
+      {
+        kind: 'TEST',
+        filePath: file.relativePath,
+        startLine: declaration.startLine,
+        endLine: declaration.endLine,
+      },
+      analyzeDeclaration(declaration, file.language),
     );
   }
 
@@ -190,6 +194,13 @@ export async function collectTestEvidence(
     .filter((file): file is SourceFile => file !== undefined)
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
     .slice(0, REQUEST_LIMITS.testFiles);
+
+  // A source must never name a file the payload leaves out, or the grader has nothing to join it to.
+  const keptPaths = new Set(sourceFiles.map((file) => file.relativePath));
+  const payloadSources = sources.map(
+    (source): TestSource =>
+      source.kind === 'NONE' || keptPaths.has(source.filePath) ? source : { kind: 'NONE' },
+  );
 
   let budget = Math.max(0, options.maxTotalChars);
   const files: TestSourceFile[] = [];
@@ -206,7 +217,7 @@ export async function collectTestEvidence(
   }
 
   return {
-    payload: { sources, files, captureDisabled: options.captureSource ? undefined : true },
+    payload: { sources: payloadSources, files, captureDisabled: options.captureSource ? undefined : true },
     integrity,
   };
 }

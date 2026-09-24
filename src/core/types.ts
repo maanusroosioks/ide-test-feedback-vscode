@@ -1,11 +1,7 @@
 export type TestStatus = 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
 
-/**
- * How far the test was resolved in the project's source, independent of whether its file's content
- * was captured. `TEST` — the declaration, located by line range within its file. `FILE` — only the file itself.
- * `NONE` — not found at all, so there is nothing but the framework's own report.
- */
-export type TestSourceKind = 'TEST' | 'FILE' | 'NONE';
+/** The language an adapter runs. Kotlin and other JVM languages run under `java`. */
+export type RunLanguage = 'java' | 'python' | 'csharp';
 
 export interface NormalizedTestCase {
   testSuite?: string;
@@ -18,7 +14,7 @@ export interface NormalizedTestCase {
 
 export interface NormalizedTestRun {
   adapterId: string;
-  language: string;
+  language: RunLanguage;
   startedAt: number;
   finishedAt: number;
   results: NormalizedTestCase[];

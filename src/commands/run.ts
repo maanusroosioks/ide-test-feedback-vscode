@@ -5,20 +5,24 @@ import type { MoodleTestControl } from '../ui/testController';
 import { withProgress } from '../ui/progress';
 import { handleCommandError } from '../ui/errorHandling';
 
-export function registerRunTestsOnlyCommand(
+export function registerRunCommand(
   context: vscode.ExtensionContext,
+  commandId: string,
+  submit: boolean,
   control: MoodleTestControl,
   logger: Logger,
   status: StatusReporter,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('moodleSubmit.runTestsOnly', async () => {
+    // `target` is the clicked item when invoked from the Testing view's context
+    // menu; the palette and walkthrough pass nothing.
+    vscode.commands.registerCommand(commandId, async (target?: unknown) => {
       try {
         await withProgress('Moodle Submit', async (progress) => {
-          const folder = await resolveWorkspaceFolder();
+          const folder = control.folderFor(target) ?? (await resolveWorkspaceFolder());
           await control.performRun({
             folder,
-            submit: false,
+            submit,
             signal: progress.signal,
             report: progress.report,
           });

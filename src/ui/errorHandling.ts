@@ -1,12 +1,6 @@
 import * as vscode from 'vscode';
-import { CancelledError, MoodleSubmitError } from '../core/errors';
+import { CancelledError, describeError } from '../core/errors';
 import type { Logger, StatusReporter } from '../core/ports';
-
-export function describeError(error: unknown): string {
-  if (error instanceof MoodleSubmitError) return error.userMessage;
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
 
 export function handleCommandError(error: unknown, logger: Logger, status: StatusReporter): void {
   if (error instanceof CancelledError) {

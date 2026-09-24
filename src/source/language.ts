@@ -1,5 +1,4 @@
-// Scans for test *declarations* rather than using the line TestLocationResolver reports: that
-// line comes from a stack trace, so only failing tests have one.
+import type { RunLanguage } from '../core/types';
 
 export type SourceLanguage = 'python' | 'java' | 'kotlin' | 'csharp';
 
@@ -25,15 +24,9 @@ const EXTENSION_LANGUAGES: Record<string, SourceLanguage> = {
   '.cs': 'csharp',
 };
 
-const RUN_LANGUAGES: Record<string, SourceLanguage> = {
-  java: 'java',
-  python: 'python',
-  csharp: 'csharp',
-};
-
 /** `SOURCE_EXTENSIONS.java` also covers `.kt`, so a Kotlin file can arrive under language `java`. */
-export function languageForFile(filePath: string, runLanguage: string): SourceLanguage | undefined {
+export function languageForFile(filePath: string, runLanguage: RunLanguage): SourceLanguage {
   const dot = filePath.lastIndexOf('.');
   const extension = dot >= 0 ? filePath.slice(dot).toLowerCase() : '';
-  return EXTENSION_LANGUAGES[extension] ?? RUN_LANGUAGES[runLanguage];
+  return EXTENSION_LANGUAGES[extension] ?? runLanguage;
 }

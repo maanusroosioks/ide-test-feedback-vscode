@@ -1,4 +1,5 @@
-import type { NormalizedTestCase } from '../core/types';
+import type { NormalizedTestCase, RunLanguage } from '../core/types';
+import { describeError } from '../core/errors';
 import { runCommand } from '../util/shell';
 import type { AdapterRunResult, RunOptions, TestRunnerAdapter } from './types';
 
@@ -12,7 +13,7 @@ export interface PreparedRun {
 export interface AdapterSpec {
   id: string;
   displayName: string;
-  language: string;
+  language: RunLanguage;
   detect(folderPath: string): Promise<boolean>;
   /** Runs before the command, so it is also where stale reports get cleared. */
   prepare(folderPath: string, opts: RunOptions): Promise<PreparedRun>;
@@ -47,7 +48,7 @@ export function defineAdapter(spec: AdapterSpec): TestRunnerAdapter {
         try {
           results = await prepared.parse(startedAt);
         } catch (error) {
-          reportError = error instanceof Error ? error.message : String(error);
+          reportError = describeError(error);
           opts.logger?.log(`${displayName}: ${reportError}`);
         }
 

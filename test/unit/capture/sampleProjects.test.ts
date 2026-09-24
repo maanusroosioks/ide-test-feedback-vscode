@@ -12,9 +12,10 @@ import {
   type DeclaredSource,
   type FileSource,
   type TestEvidence,
+  type TestSourceKind,
 } from '../../../src/capture/evidence';
 import { sliceLines } from '../../../src/source';
-import type { NormalizedTestCase, NormalizedTestRun, TestSourceKind } from '../../../src/core/types';
+import type { NormalizedTestCase, NormalizedTestRun, RunLanguage } from '../../../src/core/types';
 
 const EXAMPLES = resolve('c:/Moodle/examples');
 
@@ -39,7 +40,7 @@ async function evidenceFor(folder: string, run: NormalizedTestRun): Promise<Test
 
 function run(
   adapterId: string,
-  language: string,
+  language: RunLanguage,
   results: NormalizedTestCase[],
 ): NormalizedTestRun {
   return { adapterId, language, startedAt: 1000, finishedAt: 2000, results };
