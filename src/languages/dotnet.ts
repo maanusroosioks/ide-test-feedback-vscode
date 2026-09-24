@@ -7,7 +7,12 @@ import type { PlatformProfile, SourceLanguageProfile } from './types';
 const TEST_ATTRIBUTE =
   /^[ \t]*\[[ \t]*(?:[A-Za-z_]\w*[ \t]*\.[ \t]*)*(DataTestMethod|TestMethod|TestCase|Theory|Fact|Test)\b/gm;
 
-const CSHARP_DIALECT: CLikeDialect = { markers: ATTRIBUTES, testMarker: TEST_ATTRIBUTE, expressionBodyEnd: ';' };
+const CSHARP_DIALECT: CLikeDialect = {
+  typeKeywords: ['class', 'interface', 'record', 'struct', 'enum'],
+  markers: ATTRIBUTES,
+  testMarker: TEST_ATTRIBUTE,
+  expressionBodyEnd: ';',
+};
 
 export const csharpSource: SourceLanguageProfile = {
   extensions: ['.cs'],

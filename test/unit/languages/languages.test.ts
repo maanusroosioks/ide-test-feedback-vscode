@@ -50,7 +50,7 @@ describe('language profiles', () => {
     }
   });
 
-  it('keeps src/source free of language knowledge', () => {
+  it('keeps src/source independent of the language profiles, which configure it', () => {
     const sourceDir = join(__dirname, '../../../src/source');
     for (const file of readdirSync(sourceDir)) {
       const text = readFileSync(join(sourceDir, file), 'utf8');

@@ -2,9 +2,9 @@ import { collectMarkers, expandMarkersBackward, type MarkerSyntax } from './mark
 import type { TestDeclaration } from './types';
 import { lineOf, lineStarts, matchForward, scanTopLevel } from './text';
 
-const TYPE_DECLARATION = /\b(?:class|interface|record|struct|enum|object)[ \t]+([A-Za-z_]\w*)/g;
-
 export interface CLikeDialect {
+  /** Keywords that open a named type body, e.g. `class`, `struct`. */
+  typeKeywords: string[];
   markers: MarkerSyntax;
   /** Global. Run on the masked text; each match must contain the marker's opener. */
   testMarker: RegExp;
@@ -38,12 +38,13 @@ function readNameBackward(
   return j === i ? undefined : { name: text.slice(j + 1, i + 1), start: j + 1 };
 }
 
-function scanTypeRanges(text: string, masked: string, syntax: MarkerSyntax): TypeRange[] {
+function scanTypeRanges(text: string, masked: string, dialect: CLikeDialect): TypeRange[] {
+  const syntax = dialect.markers;
+  const typeDeclaration = new RegExp(`\\b(?:${dialect.typeKeywords.join('|')})[ \\t]+([A-Za-z_]\\w*)`, 'g');
   const ranges: TypeRange[] = [];
-  TYPE_DECLARATION.lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = TYPE_DECLARATION.exec(masked)) !== null) {
+  while ((match = typeDeclaration.exec(masked)) !== null) {
     // `;` first means a forward declaration or an abstract member, not a body to descend into.
     const brace = scanTopLevel(masked, match.index + match[0].length, '{;');
     if (brace < 0 || masked[brace] !== '{') continue;
@@ -157,7 +158,7 @@ function parseMember(
 /** `masked` is `text` with comments and string contents blanked, offset for offset. */
 export function scanCLike(text: string, masked: string, dialect: CLikeDialect): TestDeclaration[] {
   const starts = lineStarts(text);
-  const types = scanTypeRanges(text, masked, dialect.markers);
+  const types = scanTypeRanges(text, masked, dialect);
   const declarations: TestDeclaration[] = [];
   const seen = new Set<number>();
 

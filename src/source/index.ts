@@ -1,5 +1,7 @@
-// Language-agnostic source analysis. Everything specific to one language is in `../languages`,
-// which configures these and is what the rest of the extension calls.
+// Shared engines and helpers for reading test source. Some serve only one language (scanPython) or
+// carry harmless supersets (backtick names in scanCLike), but nothing here has to change to add a
+// language: everything that varies is configured by a profile in `../languages`, which is also
+// what the rest of the extension calls.
 
 export type { TestDeclaration } from './types';
 export { maskWith, type LexicalRules } from './mask';
