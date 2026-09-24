@@ -2,7 +2,8 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { anyExists, cleanupReport, pathExists, tempReportPath } from '../../../src/util/shell';
+import { CancelledError } from '../../../src/core/errors';
+import { anyExists, cleanupReport, pathExists, runCommand, tempReportPath } from '../../../src/util/shell';
 
 describe('anyExists', () => {
   it('is true when at least one of the names is present', async () => {
@@ -46,5 +47,56 @@ describe('tempReportPath', () => {
     const paths = new Set(Array.from({ length: 50 }, () => tempReportPath('pytest', 'xml')));
     expect(paths.size).toBe(50);
     expect(dirname([...paths][0])).toBe(resolve(tmpdir()));
+  });
+});
+
+describe('runCommand', () => {
+  // Double quotes outside, single inside: valid under both cmd.exe and sh.
+  const node = (script: string): string => `node -e "${script}"`;
+
+  it('captures stdout, stderr and the exit code', async () => {
+    const result = await runCommand(
+      node("process.stdout.write('out'); process.stderr.write('err'); process.exit(3)"),
+      { cwd: process.cwd() },
+    );
+
+    expect(result).toEqual({ exitCode: 3, stdout: 'out', stderr: 'err' });
+  });
+
+  it('reports exit code 0 on success', async () => {
+    const result = await runCommand(node("process.stdout.write('ok')"), { cwd: process.cwd() });
+
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('runs in the given working directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'run-command-'));
+
+    const { stdout } = await runCommand(node('process.stdout.write(process.cwd())'), { cwd: dir });
+
+    expect(resolve(stdout)).toBe(resolve(dir));
+  });
+
+  it('streams output to the sink as it arrives, tagged by stream', async () => {
+    const chunks: Array<[string, string]> = [];
+
+    await runCommand(node("process.stdout.write('a'); process.stderr.write('b')"), {
+      cwd: process.cwd(),
+      onOutput: (chunk, stream) => chunks.push([chunk, stream]),
+    });
+
+    expect(chunks).toContainEqual(['a', 'stdout']);
+    expect(chunks).toContainEqual(['b', 'stderr']);
+  });
+
+  it('kills the command and rejects with CancelledError when aborted mid-run', async () => {
+    const controller = new AbortController();
+    const started = Date.now();
+
+    const run = runCommand(node('setTimeout(() => {}, 30000)'), { cwd: process.cwd(), signal: controller.signal });
+    setTimeout(() => controller.abort(), 100);
+
+    await expect(run).rejects.toBeInstanceOf(CancelledError);
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
 });

@@ -1,4 +1,6 @@
-import { resolve } from 'node:path';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TestLocationResolver, parseStackFrames } from '../../../src/capture/location';
 import type { RunLanguage } from '../../../src/core/types';
@@ -178,5 +180,46 @@ describe('resolveTestLocation', () => {
     await resolver.resolveTestLocation('com.pkg.FooTest', undefined);
 
     expect(probes).toBe(afterFirst);
+  });
+});
+
+describe('TestLocationResolver — relative frame paths', () => {
+  it('finds a path-qualified frame inside a module when it is not at the root', async () => {
+    const resolver = resolverFor('python', ['backend/tests/test_math.py'], ['backend']);
+
+    expect(await resolver.resolveTestLocation(undefined, 'tests/test_math.py:12: AssertionError')).toEqual({
+      file: resolve(ROOT, 'backend/tests/test_math.py'),
+      line: 12,
+    });
+  });
+});
+
+describe('TestLocationResolver — real filesystem', () => {
+  async function project(files: string[]): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), 'location-'));
+    for (const file of files) {
+      await mkdir(dirname(join(root, file)), { recursive: true });
+      await writeFile(join(root, file), '', 'utf8');
+    }
+    return root;
+  }
+
+  it('searches module directories, skipping build output and hidden folders', async () => {
+    const root = await project([
+      '.cache/src/test/java/com/pkg/FooTest.java',
+      'build/src/test/java/com/pkg/FooTest.java',
+      'core/src/test/java/com/pkg/FooTest.java',
+    ]);
+    const resolver = new TestLocationResolver(root, 'java');
+
+    expect(await resolver.resolveSuiteFile('com.pkg.FooTest')).toBe(
+      resolve(root, 'core/src/test/java/com/pkg/FooTest.java'),
+    );
+  });
+
+  it('finds nothing in a folder that does not exist', async () => {
+    const resolver = new TestLocationResolver(join(tmpdir(), 'location-missing', 'nowhere'), 'java');
+
+    expect(await resolver.resolveSuiteFile('com.pkg.FooTest')).toBeUndefined();
   });
 });

@@ -254,3 +254,15 @@ describe('buildTestRunRequest — captured source', () => {
     expect(request.testFiles?.[0].path).toHaveLength(1024);
   });
 });
+
+describe('InvalidPayloadError', () => {
+  it('rejects a result with a blank test name', () => {
+    const run = sampleRun({ results: [{ testSuite: 'test_calculator', testName: '   ', status: 'PASSED' }] });
+
+    expect(() => buildTestRunRequest(run, metadata)).toThrow('Encountered a test result with a blank testName.');
+  });
+
+  it('prefixes its message for the user', () => {
+    expect(new InvalidPayloadError('too many results').userMessage).toBe('Invalid submission: too many results');
+  });
+});
