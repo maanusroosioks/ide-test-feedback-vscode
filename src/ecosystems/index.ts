@@ -1,6 +1,7 @@
 // The one door into ecosystem knowledge: the rest of the extension imports from here, never from an
-// ecosystem's own files. Adding an ecosystem means adding its folder and one entry in ECOSYSTEMS;
-// the compiler rejects a Platform or SourceLanguage left without a profile.
+// ecosystem's own files. Adding an ecosystem means adding its folder, its entry in ECOSYSTEMS, and
+// its names to the Platform and SourceLanguage unions; the compiler rejects a name left without a
+// profile.
 
 import type { Platform } from '../core/types';
 import type { TestRunnerAdapter } from '../runner/types';
@@ -20,11 +21,13 @@ export type {
 } from './types';
 
 /** In adapter detection priority order. */
-export const ECOSYSTEMS: Record<Platform, Ecosystem> = {
+export const ECOSYSTEMS = {
   jvm: jvmEcosystem,
   python: pythonEcosystem,
   dotnet: dotnetEcosystem,
-};
+} satisfies Record<Platform, Ecosystem>;
+
+type HostedLanguage = { [P in Platform]: keyof (typeof ECOSYSTEMS)[P]['languages'] }[Platform];
 
 /**
  * The first match wins when there is no picker. Each id must also be listed in
@@ -34,17 +37,16 @@ export const ALL_ADAPTERS: readonly TestRunnerAdapter[] = Object.values(ECOSYSTE
   (ecosystem) => ecosystem.adapters,
 );
 
-export const PLATFORMS: Record<Platform, PlatformProfile> = {
-  jvm: jvmEcosystem.platform,
-  python: pythonEcosystem.platform,
-  dotnet: dotnetEcosystem.platform,
-};
+export const PLATFORMS = Object.fromEntries(
+  Object.entries(ECOSYSTEMS).map(([platform, ecosystem]) => [platform, ecosystem.platform]),
+) as Record<Platform, PlatformProfile>;
 
-export const SOURCE_LANGUAGES: Record<SourceLanguage, SourceLanguageProfile> = {
-  ...jvmEcosystem.languages,
-  ...pythonEcosystem.languages,
-  ...dotnetEcosystem.languages,
-};
+// Casting to the hosted languages, not to SourceLanguage, keeps the assignment checked: a
+// SourceLanguage no ecosystem hosts is a missing property.
+export const SOURCE_LANGUAGES: Record<SourceLanguage, SourceLanguageProfile> = Object.assign(
+  {},
+  ...Object.values(ECOSYSTEMS).map((ecosystem) => ecosystem.languages),
+) as Record<HostedLanguage, SourceLanguageProfile>;
 
 const LANGUAGE_BY_EXTENSION = new Map<string, SourceLanguage>(
   (Object.entries(SOURCE_LANGUAGES) as [SourceLanguage, SourceLanguageProfile][]).flatMap(

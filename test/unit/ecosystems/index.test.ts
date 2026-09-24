@@ -25,6 +25,12 @@ describe('ECOSYSTEMS', () => {
     }
   });
 
+  // SOURCE_LANGUAGES merges them, so a second claim would silently replace the first.
+  it('gives each source language to one ecosystem', () => {
+    const languages = Object.values(ECOSYSTEMS).flatMap((ecosystem) => Object.keys(ecosystem.languages));
+    expect(new Set(languages).size).toBe(languages.length);
+  });
+
   it('hosts its own default source language', () => {
     for (const [platform, ecosystem] of Object.entries(ECOSYSTEMS)) {
       expect(Object.keys(ecosystem.languages), platform).toContain(ecosystem.platform.defaultSourceLanguage);
