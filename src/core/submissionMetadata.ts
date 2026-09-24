@@ -119,9 +119,8 @@ function scpToHttps(host: string, path: string): string {
 }
 
 /**
- * Turns a git remote into a browsable HTTPS URL, or drops it. Strips embedded credentials (a
- * `https://user:token@host/...` remote is common in CI-style clones) since this goes into a
- * submission payload, not just a local config.
+ * Turns a git remote into a browsable HTTPS URL, or drops it. Strips credentials, as in the
+ * `https://user:token@host/...` remotes of CI-style clones, since the URL is submitted.
  */
 export function normalizeRemoteUrl(raw: string): string | undefined {
   const trimmed = raw.trim();

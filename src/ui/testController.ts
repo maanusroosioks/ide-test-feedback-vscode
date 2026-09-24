@@ -352,8 +352,7 @@ export function registerTestController(
         pickFromMultiple: pickAdapter,
       });
 
-      // One resolver for the whole run: its probe cache is what makes the second pass over the
-      // results, for source capture, cost no extra filesystem work.
+      // Shared with source capture, whose second pass over the results then reuses the probe cache.
       const resolver = new TestLocationResolver(folder.uri.fsPath, run.platform);
       await applyResults(testRun, folder, run, resolver);
       deps.status.result(summary);
@@ -405,10 +404,8 @@ export function registerTestController(
 
   // ------------------------------------------------------------- profile ----
 
-  // Only one profile — submitting is the separate runAndSubmit command
-  // (toolbar button + context menu), not a second profile to switch between.
-  // No handler-token wiring: the run created for this request shares its cancellation, and
-  // performRun already listens on `testRun.token`.
+  // One profile: submitting is the separate runAndSubmit command. No handler-token wiring, since
+  // the run created for this request shares its cancellation and performRun listens on that.
   const runHandler = async (request: vscode.TestRunRequest): Promise<void> => {
     try {
       await performRun({ folder: await folderForRequest(request), submit: false, request });

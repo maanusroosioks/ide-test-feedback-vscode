@@ -19,7 +19,6 @@ export const csharpSource: SourceLanguageProfile = {
   lexer: {
     lineComment: '//',
     blockComment: ['/*', '*/'],
-    // Raw string literals (`"""…"""`) take backslashes literally.
     tripleQuoteEscapes: false,
     stringPrefixes: { '@': 'verbatim', $: 'interpolated' },
   },

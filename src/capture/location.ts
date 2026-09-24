@@ -102,7 +102,7 @@ export class TestLocationResolver {
     return cached;
   }
 
-  /** Prefers a frame belonging to the suite itself, then the first resolvable frame. */
+  /** Prefers a frame belonging to the suite itself, then the first resolvable frame, then the suite's file. */
   async resolveTestLocation(
     testSuite: string | undefined,
     stackTrace: string | undefined,

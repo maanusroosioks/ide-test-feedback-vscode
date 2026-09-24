@@ -49,7 +49,6 @@ export const kotlinSource = jvmSource({
   // `enum class` and `data class` are reached through `class`.
   typeKeywords: ['class', 'interface', 'object'],
   lexer: {
-    // `"""…"""` is a raw string.
     tripleQuoteEscapes: false,
     nestedBlockComments: true,
     templateOpener: '${',

@@ -9,8 +9,8 @@ export function describeFinding(finding: SuspiciousTest): string {
 }
 
 /**
- * Warns but never blocks: a client-side block would only teach students to disable the extension.
- * The submitted source shows an emptied test regardless of what is chosen here.
+ * Warns but never blocks: a client-side block would only teach students to disable the extension,
+ * and the grader sees an emptied test in the submitted source anyway.
  */
 export async function confirmDegradedRun(
   findings: SuspiciousTest[],

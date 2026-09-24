@@ -24,10 +24,7 @@ export async function openSetupWalkthrough(context: vscode.ExtensionContext): Pr
   );
 }
 
-/**
- * One-time proactive nudge on startup. Silent once the extension is configured
- * or once the user has dismissed it.
- */
+/** One-time nudge on startup; silent once configured or dismissed. */
 export async function maybePromptOnboarding(context: vscode.ExtensionContext): Promise<void> {
   if (isConfigured()) return;
   if (context.globalState.get<boolean>(NUDGE_DISMISSED_KEY)) return;
@@ -45,11 +42,7 @@ export async function maybePromptOnboarding(context: vscode.ExtensionContext): P
   }
 }
 
-/**
- * Just-in-time guard for commands that submit. Offers to finish setup and
- * returns whether the caller should proceed. A `false` return means the user
- * backed out — abort quietly, no error.
- */
+/** Offers to finish setup before a submitting run. `false` means abort quietly, no error. */
 export async function ensureConfigured(context: vscode.ExtensionContext): Promise<boolean> {
   if (isConfigured()) return true;
 

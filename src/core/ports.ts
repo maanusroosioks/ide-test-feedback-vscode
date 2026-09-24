@@ -1,6 +1,5 @@
-// The seams between the pure layers and the editor. Declared here so adapters, core and the
-// submission pipeline can depend on the shape of a logger or a status bar without importing
-// `vscode` to get it; `ui/` supplies the implementations.
+// The seams between the pure layers and the editor, declared here so those layers can take a logger
+// or status bar without importing `vscode`; `ui/` supplies the implementations.
 
 export interface Logger {
   log(message: string): void;

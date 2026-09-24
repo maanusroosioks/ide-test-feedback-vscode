@@ -62,7 +62,7 @@ export const ATTRIBUTES: MarkerSyntax = {
   },
 };
 
-/** Walks back over contiguous markers. Masked Javadoc reads as blank, so it stops there. */
+/** Walks back over contiguous markers. Comments are masked to blanks, so one between markers is walked over. */
 export function expandMarkersBackward(masked: string, offset: number, syntax: MarkerSyntax): number {
   let start = offset;
   for (;;) {

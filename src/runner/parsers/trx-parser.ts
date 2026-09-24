@@ -52,8 +52,7 @@ function mapOutcome(outcome: string): TestStatus {
 
 export function parseTrx(xml: string): NormalizedTestCase[] {
   const doc = parser.parse(xml);
-  // See parseJUnitXml: a missing root element means an unusable file, not an
-  // empty run, and the two need to be reported differently.
+  // As in parseJUnitXml: a missing root means an unusable file, not an empty run.
   if (doc.TestRun === undefined) {
     throw new Error('no <TestRun> element found — this is not a TRX report');
   }
@@ -79,7 +78,6 @@ export function parseTrx(xml: string): NormalizedTestCase[] {
   });
 }
 
-/** Reads one TRX report, throwing {@link ReportUnavailableError} if it can't be used. */
 export function parseTrxFile(path: string): Promise<NormalizedTestCase[]> {
   return parseReportFile(path, parseTrx);
 }

@@ -3,7 +3,7 @@ import type { PlatformProfile } from '../types';
 /** `at Ns.FooTests.Bar() in C:\src\FooTests.cs:line 42`. */
 const FRAME = /\bin\s+(.+?):line\s+(\d+)/g;
 
-/** Folders rarely follow namespaces, so the class's own name is the likelier file. */
+/** Folders rarely follow namespaces, so the bare class name is tried too. */
 function sourcePaths(qualifiedName: string): string[] {
   const segments = qualifiedName.split('.');
   const paths = [segments.join('/')];

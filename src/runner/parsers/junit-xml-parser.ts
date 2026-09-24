@@ -82,8 +82,7 @@ function collectSuite(suite: JUnitTestSuiteXml, into: NormalizedTestCase[]): voi
     });
   }
 
-  // JUnit 5 aggregated reports can nest <testsuite> elements; recurse so their
-  // cases aren't silently dropped.
+  // Aggregated reports can nest <testsuite> elements.
   for (const nested of suite.testsuite ?? []) {
     collectSuite(nested, into);
   }
@@ -91,8 +90,7 @@ function collectSuite(suite: JUnitTestSuiteXml, into: NormalizedTestCase[]): voi
 
 export function parseJUnitXml(xml: string): NormalizedTestCase[] {
   const doc = parser.parse(xml);
-  // fast-xml-parser doesn't throw on garbage, so an empty file would otherwise
-  // read as a run with no tests.
+  // fast-xml-parser doesn't throw on garbage, so an empty file would read as a run with no tests.
   if (doc.testsuites === undefined && doc.testsuite === undefined) {
     throw new Error('no <testsuite> element found — this is not a JUnit XML report');
   }

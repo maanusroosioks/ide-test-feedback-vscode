@@ -35,11 +35,7 @@ export interface DeclaredSource {
 
 export type TestSource = UnlocatedSource | FileSource | DeclaredSource;
 
-/**
- * How far the test was resolved in the project's source, independent of whether its file's content
- * was captured. `TEST` — the declaration, located by line range within its file. `FILE` — only the file itself.
- * `NONE` — not found at all, so there is nothing but the framework's own report.
- */
+/** How far the test was resolved in the project's source, whether or not its file's content was captured. */
 export type TestSourceKind = TestSource['kind'];
 
 export interface TestSourceFile {
@@ -50,7 +46,7 @@ export interface TestSourceFile {
   truncated?: boolean;
 }
 
-/** The half bound for the grader. Everything the payload builder is allowed to see. */
+/** The half sent to the grader, and all the payload builder may see. */
 export interface TestEvidencePayload {
   /** Index-aligned with `run.results`. */
   sources: TestSource[];
@@ -96,7 +92,7 @@ function truncationNotice(removed: number): string {
   return `\n… [truncated by moodle-test-submit: ${removed} more characters]`;
 }
 
-/** The notice outruns a short file, so it is reserved from the budget rather than the cap. */
+/** Reserved before capping, so content plus notice never exceeds the budget. */
 function noticeReserve(text: string): number {
   return truncationNotice(text.length).length;
 }

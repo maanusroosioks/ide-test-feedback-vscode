@@ -36,10 +36,7 @@ export async function promptAndSaveAssignmentKey(folder: vscode.WorkspaceFolder)
   }
 }
 
-/**
- * Just-in-time guard before a submitting run, so a missing key is caught before the tests run
- * rather than after. `false` means the user backed out — abort quietly, no error.
- */
+/** Catches a missing key before the tests run, not after. `false` means abort quietly, no error. */
 export async function ensureAssignmentKey(folder: vscode.WorkspaceFolder): Promise<boolean> {
   const file = await readWorkspaceConfigFile(folder.uri.fsPath);
   if (file?.assignmentKey) return true;

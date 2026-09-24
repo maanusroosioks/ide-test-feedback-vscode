@@ -16,10 +16,7 @@ export interface SourceLanguageProfile {
   lexer: LexicalRules;
   /** `masked` is `text` put through `lexer`. */
   scanDeclarations(text: string, masked: string): TestDeclaration[];
-  /**
-   * One global alternation, not a list: a global regex consumes what it matches, so chained styles
-   * like AssertJ's `assertThat(x).isEqualTo(y)` count once.
-   */
+  /** Global; each match counts as one assertion. */
   assertions: RegExp;
   /** Tested against each marker on the test and its enclosing type. */
   skipMarkers: RegExp[];

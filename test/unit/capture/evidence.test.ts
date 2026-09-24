@@ -25,7 +25,7 @@ interface Harness {
   reads: string[];
 }
 
-/** The union widened back out: these tests assert across all three arms on fields the tag gates. */
+/** Every arm's fields as optional, so assertions needn't narrow on `kind` first. */
 type AnySource = Partial<Omit<DeclaredSource, 'kind'> & Omit<FileSource, 'kind'>> & {
   kind: TestSourceKind;
 };

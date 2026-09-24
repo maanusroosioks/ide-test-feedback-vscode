@@ -3,7 +3,7 @@ export interface LexicalRules {
   blockComment?: [open: string, close: string];
   /** Kotlin's block comments nest; Java's and C#'s end at the first close. */
   nestedBlockComments?: boolean;
-  /** Kotlin raw strings and C# raw string literals take backslashes literally. */
+  /** Whether `\` escapes inside `"""…"""`; not in Kotlin raw strings or C# raw string literals. */
   tripleQuoteEscapes: boolean;
   /**
    * Characters that may prefix a quote, in any combination: C#'s `@"…"` and `$"…"`, Python's
@@ -69,7 +69,7 @@ function quotedLiteral(text: string, quoteIndex: number, rules: LexicalRules, st
       continue;
     }
     if (hole && text.startsWith(hole, i)) {
-      // A doubled opener is C#'s escaped brace, `{{`.
+      // A doubled opener is an escaped brace, `{{`.
       if (text.startsWith(hole, i + hole.length)) {
         i += 2 * hole.length;
         continue;
