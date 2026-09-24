@@ -1,5 +1,3 @@
-import type { RunLanguage } from '../core/types';
-
 export type SourceLanguage = 'python' | 'java' | 'kotlin' | 'csharp';
 
 export interface TestDeclaration {
@@ -14,19 +12,4 @@ export interface TestDeclaration {
   containerMarkers: string[];
   /** Excludes the signature and markers. */
   bodyText: string;
-}
-
-const EXTENSION_LANGUAGES: Record<string, SourceLanguage> = {
-  '.py': 'python',
-  '.java': 'java',
-  '.kt': 'kotlin',
-  '.kts': 'kotlin',
-  '.cs': 'csharp',
-};
-
-/** `SOURCE_EXTENSIONS.java` also covers `.kt`, so a Kotlin file can arrive under language `java`. */
-export function languageForFile(filePath: string, runLanguage: RunLanguage): SourceLanguage {
-  const dot = filePath.lastIndexOf('.');
-  const extension = dot >= 0 ? filePath.slice(dot).toLowerCase() : '';
-  return EXTENSION_LANGUAGES[extension] ?? runLanguage;
 }

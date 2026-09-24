@@ -1,8 +1,8 @@
 import { readdir } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { defineAdapter } from './define';
-import { cleanupReport, tempReportPath } from '../util/shell';
 import { parseTrxFile } from './parsers/trx-parser';
+import { tempFileReport } from './reports';
 
 const PROJECT_EXTENSIONS = ['.csproj', '.sln'];
 
@@ -21,15 +21,14 @@ export const dotnetTestAdapter = defineAdapter({
   },
 
   async prepare(_folderPath, opts) {
-    const reportPath = tempReportPath('dotnet-test', 'trx');
     const baseCommand = opts.commandOverride ?? 'dotnet test';
-    const logger = `--logger "trx;LogFileName=${basename(reportPath)}"`;
-    const resultsDir = `--results-directory "${dirname(reportPath)}"`;
 
-    return {
-      command: `${baseCommand} ${logger} ${resultsDir}`,
-      parse: () => parseTrxFile(reportPath),
-      cleanup: () => cleanupReport(reportPath),
-    };
+    return tempFileReport({
+      adapterId: 'dotnet-test',
+      extension: 'trx',
+      command: (reportPath) =>
+        `${baseCommand} --logger "trx;LogFileName=${basename(reportPath)}" --results-directory "${dirname(reportPath)}"`,
+      parse: parseTrxFile,
+    });
   },
 });

@@ -1,13 +1,78 @@
-import type { SourceLanguage, TestDeclaration } from './language';
-import { maskCommentsAndStrings } from './mask';
+import type { TestDeclaration } from './language';
+import { maskWith, type LexicalRules } from './mask';
 import { lineOf, lineStarts, matchBackward, matchForward, scanTopLevel } from './text';
 
-const JVM_TEST_ANNOTATION =
-  /@[ \t]*(?:[A-Za-z_]\w*[ \t]*\.[ \t]*)*(ParameterizedTest|RepeatedTest|TestFactory|TestTemplate|Test)\b/g;
-// Anchored to the start of a line, on the mask, so array/indexer syntax can't pose as an attribute.
-const CSHARP_TEST_ATTRIBUTE =
-  /^[ \t]*\[[ \t]*(?:[A-Za-z_]\w*[ \t]*\.[ \t]*)*(DataTestMethod|TestMethod|TestCase|Theory|Fact|Test)\b/gm;
 const TYPE_DECLARATION = /\b(?:class|interface|record|struct|enum|object)[ \t]+([A-Za-z_]\w*)/g;
+
+/** How a family of languages writes the markers (annotations, attributes) that precede a declaration. */
+export interface MarkerSyntax {
+  opener: string;
+  /** Start of the marker ending just before `before`, or undefined when none does. */
+  previousMarkerStart(masked: string, before: number): number | undefined;
+  /** End (exclusive) of the marker opening at `start`, or -1. */
+  markerEnd(masked: string, start: number): number;
+}
+
+function skipSpaceBackward(masked: string, from: number): number {
+  let i = from;
+  while (i >= 0 && /\s/.test(masked[i])) i--;
+  return i;
+}
+
+/** `@Test`, `@DisplayName("x")`, `@org.junit.jupiter.api.Test`. */
+export const ANNOTATIONS: MarkerSyntax = {
+  opener: '@',
+
+  previousMarkerStart(masked, before) {
+    let i = skipSpaceBackward(masked, before - 1);
+    if (i < 0) return undefined;
+    if (masked[i] === ')') {
+      const open = matchBackward(masked, i, '(', ')');
+      if (open < 0) return undefined;
+      i = skipSpaceBackward(masked, open - 1);
+    }
+    let name = i;
+    while (name >= 0 && /[A-Za-z0-9_.]/.test(masked[name])) name--;
+    return name === i || name < 0 || masked[name] !== '@' ? undefined : name;
+  },
+
+  markerEnd(masked, start) {
+    let j = start + 1;
+    while (j < masked.length && /[A-Za-z0-9_.]/.test(masked[j])) j++;
+    // Only spaces/tabs, never a newline: otherwise `@Test\nvoid foo()` eats the parameter list.
+    let k = j;
+    while (k < masked.length && /[ \t]/.test(masked[k])) k++;
+    if (masked[k] !== '(') return j;
+    const close = matchForward(masked, k, '(', ')');
+    return close < 0 ? -1 : close + 1;
+  },
+};
+
+/** `[Fact]`, `[Theory, InlineData(1)]`. */
+export const ATTRIBUTES: MarkerSyntax = {
+  opener: '[',
+
+  previousMarkerStart(masked, before) {
+    const i = skipSpaceBackward(masked, before - 1);
+    if (i < 0 || masked[i] !== ']') return undefined;
+    const open = matchBackward(masked, i, '[', ']');
+    return open < 0 ? undefined : open;
+  },
+
+  markerEnd(masked, start) {
+    const close = matchForward(masked, start, '[', ']');
+    return close < 0 ? -1 : close + 1;
+  },
+};
+
+export interface CLikeDialect {
+  lexer: LexicalRules;
+  markers: MarkerSyntax;
+  /** Global. Run on the masked text; each match must contain the marker's opener. */
+  testMarker: RegExp;
+  /** What ends an `=`/`=>` expression body, e.g. Kotlin's newline. */
+  expressionBodyEnd: string;
+}
 
 interface TypeRange {
   name: string;
@@ -16,37 +81,13 @@ interface TypeRange {
   markers: string[];
 }
 
-function isMarkerOpener(char: string, language: SourceLanguage): boolean {
-  return language === 'csharp' ? char === '[' : char === '@';
-}
-
-/** Walks back over contiguous annotations/attributes. Masked Javadoc reads as blank, so it stops there. */
-function expandMarkersBackward(masked: string, offset: number, language: SourceLanguage): number {
+/** Walks back over contiguous markers. Masked Javadoc reads as blank, so it stops there. */
+function expandMarkersBackward(masked: string, offset: number, syntax: MarkerSyntax): number {
   let start = offset;
   for (;;) {
-    let i = start - 1;
-    while (i >= 0 && /\s/.test(masked[i])) i--;
-    if (i < 0) return start;
-
-    if (masked[i] === ']') {
-      if (language !== 'csharp') return start;
-      const open = matchBackward(masked, i, '[', ']');
-      if (open < 0) return start;
-      start = open;
-      continue;
-    }
-
-    if (masked[i] === ')') {
-      const open = matchBackward(masked, i, '(', ')');
-      if (open < 0) return start;
-      i = open - 1;
-      while (i >= 0 && /\s/.test(masked[i])) i--;
-    }
-
-    let name = i;
-    while (name >= 0 && /[A-Za-z0-9_.]/.test(masked[name])) name--;
-    if (name === i || name < 0 || masked[name] !== '@' || language === 'csharp') return start;
-    start = name;
+    const previous = syntax.previousMarkerStart(masked, start);
+    if (previous === undefined) return start;
+    start = previous;
   }
 }
 
@@ -54,35 +95,18 @@ function collectMarkers(
   text: string,
   masked: string,
   start: number,
-  language: SourceLanguage,
+  syntax: MarkerSyntax,
 ): { markers: string[]; end: number } {
   const markers: string[] = [];
   let i = start;
 
   for (;;) {
     while (i < masked.length && /\s/.test(masked[i])) i++;
-    if (!isMarkerOpener(masked[i], language)) break;
-
-    if (language === 'csharp') {
-      const close = matchForward(masked, i, '[', ']');
-      if (close < 0) break;
-      markers.push(text.slice(i, close + 1).trim());
-      i = close + 1;
-      continue;
-    }
-
-    let j = i + 1;
-    while (j < masked.length && /[A-Za-z0-9_.]/.test(masked[j])) j++;
-    // Only spaces/tabs, never a newline: otherwise `@Test\nvoid foo()` eats the parameter list.
-    let k = j;
-    while (k < masked.length && /[ \t]/.test(masked[k])) k++;
-    if (masked[k] === '(') {
-      const close = matchForward(masked, k, '(', ')');
-      if (close < 0) break;
-      j = close + 1;
-    }
-    markers.push(text.slice(i, j).trim());
-    i = j;
+    if (masked[i] !== syntax.opener) break;
+    const end = syntax.markerEnd(masked, i);
+    if (end < 0) break;
+    markers.push(text.slice(i, end).trim());
+    i = end;
   }
 
   return { markers, end: i };
@@ -107,7 +131,7 @@ function readNameBackward(
   return j === i ? undefined : { name: text.slice(j + 1, i + 1), start: j + 1 };
 }
 
-function scanTypeRanges(text: string, masked: string, language: SourceLanguage): TypeRange[] {
+function scanTypeRanges(text: string, masked: string, syntax: MarkerSyntax): TypeRange[] {
   const ranges: TypeRange[] = [];
   TYPE_DECLARATION.lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -120,12 +144,12 @@ function scanTypeRanges(text: string, masked: string, language: SourceLanguage):
     const end = matchForward(masked, brace, '{', '}');
     if (end < 0) continue;
 
-    const markerStart = expandMarkersBackward(masked, match.index, language);
+    const markerStart = expandMarkersBackward(masked, match.index, syntax);
     ranges.push({
       name: match[1],
       start: match.index,
       end,
-      markers: markerStart < match.index ? collectMarkers(text, masked, markerStart, language).markers : [],
+      markers: markerStart < match.index ? collectMarkers(text, masked, markerStart, syntax).markers : [],
     });
   }
 
@@ -136,16 +160,15 @@ function containersOf(ranges: TypeRange[], offset: number): TypeRange[] {
   return ranges.filter((range) => range.start < offset && offset < range.end);
 }
 
-function testMarkerOffsets(masked: string, language: SourceLanguage): number[] {
-  // The C# pattern is line-anchored, so its match starts at the indent rather than at the `[`.
-  const csharp = language === 'csharp';
-  const pattern = csharp ? CSHARP_TEST_ATTRIBUTE : JVM_TEST_ANNOTATION;
+function testMarkerOffsets(masked: string, dialect: CLikeDialect): number[] {
+  // A line-anchored pattern starts at the indent rather than at the opener.
+  const pattern = dialect.testMarker;
   pattern.lastIndex = 0;
 
   const offsets: number[] = [];
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(masked)) !== null) {
-    offsets.push(csharp ? match.index + match[0].indexOf('[') : match.index);
+    offsets.push(match.index + match[0].indexOf(dialect.markers.opener));
   }
   return offsets;
 }
@@ -180,9 +203,9 @@ function parseMember(
   text: string,
   masked: string,
   start: number,
-  language: SourceLanguage,
+  dialect: CLikeDialect,
 ): ParsedMember | undefined {
-  const { markers, end: afterMarkers } = collectMarkers(text, masked, start, language);
+  const { markers, end: afterMarkers } = collectMarkers(text, masked, start, dialect.markers);
 
   // A brace, terminator or assignment before the parameter list means this isn't a method.
   const parenOpen = scanTopLevel(masked, afterMarkers, '({};=', { unbalancedClose: true });
@@ -210,9 +233,7 @@ function parseMember(
 
   if (expressionStart >= 0) {
     // A closer with no opener of its own ends the expression: it belongs to the enclosing type.
-    const stop = scanTopLevel(masked, expressionStart, language === 'kotlin' ? ';\n' : ';', {
-      unbalancedClose: true,
-    });
+    const stop = scanTopLevel(masked, expressionStart, dialect.expressionBodyEnd, { unbalancedClose: true });
     const end = stop < 0 ? masked.length : stop;
     return {
       name: named.name,
@@ -226,16 +247,16 @@ function parseMember(
   return undefined;
 }
 
-export function scanCLike(text: string, language: SourceLanguage): TestDeclaration[] {
-  const masked = maskCommentsAndStrings(text, language);
+export function scanCLike(text: string, dialect: CLikeDialect): TestDeclaration[] {
+  const masked = maskWith(text, dialect.lexer);
   const starts = lineStarts(text);
-  const types = scanTypeRanges(text, masked, language);
+  const types = scanTypeRanges(text, masked, dialect.markers);
   const declarations: TestDeclaration[] = [];
   const seen = new Set<number>();
 
-  for (const offset of testMarkerOffsets(masked, language)) {
-    const start = expandMarkersBackward(masked, offset, language);
-    const member = parseMember(text, masked, start, language);
+  for (const offset of testMarkerOffsets(masked, dialect)) {
+    const start = expandMarkersBackward(masked, offset, dialect.markers);
+    const member = parseMember(text, masked, start, dialect);
     if (!member || seen.has(member.signatureOffset)) continue;
     seen.add(member.signatureOffset);
 

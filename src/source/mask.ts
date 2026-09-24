@@ -1,4 +1,11 @@
-import type { SourceLanguage } from './language';
+export interface LexicalRules {
+  lineComment: string;
+  blockComment?: [open: string, close: string];
+  /** Kotlin raw strings and C# raw string literals take backslashes literally. */
+  tripleQuoteEscapes: boolean;
+  /** Characters that may prefix a quote, e.g. C#'s `@"…"` and `$"…"`. A `verbatim` prefix makes `""` the escape. */
+  stringPrefixes?: Record<string, 'verbatim' | 'plain'>;
+}
 
 // ----------------------------------------------------------------- literals ----
 
@@ -13,12 +20,11 @@ function endOfLine(text: string, from: number): number {
   return newline < 0 ? text.length : newline;
 }
 
-function quotedLiteral(text: string, quoteIndex: number, language: SourceLanguage): Literal {
+function quotedLiteral(text: string, quoteIndex: number, rules: LexicalRules): Literal {
   const quote = text[quoteIndex];
   const triple = text.startsWith(quote.repeat(3), quoteIndex);
   const delimiter = triple ? quote.repeat(3) : quote;
-  // Kotlin raw strings and C# raw string literals are the two that take backslashes literally.
-  const escapes = !triple || language === 'python' || language === 'java';
+  const escapes = !triple || rules.tripleQuoteEscapes;
   const contentStart = quoteIndex + delimiter.length;
 
   let i = contentStart;
@@ -55,27 +61,28 @@ function verbatimLiteral(text: string, quoteIndex: number): Literal {
   return { contentStart, contentEnd: text.length, end: text.length };
 }
 
-function literalAt(text: string, index: number, language: SourceLanguage): Literal | undefined {
+function literalAt(text: string, index: number, rules: LexicalRules): Literal | undefined {
   const char = text[index];
+  const prefixes = rules.stringPrefixes;
 
-  if (language === 'csharp' && (char === '@' || char === '$')) {
+  if (prefixes?.[char] !== undefined) {
     let i = index;
     let verbatim = false;
-    while (text[i] === '@' || text[i] === '$') {
-      if (text[i] === '@') verbatim = true;
+    while (prefixes[text[i]] !== undefined) {
+      if (prefixes[text[i]] === 'verbatim') verbatim = true;
       i++;
     }
     if (text[i] !== '"') return undefined;
-    return verbatim ? verbatimLiteral(text, i) : quotedLiteral(text, i, language);
+    return verbatim ? verbatimLiteral(text, i) : quotedLiteral(text, i, rules);
   }
 
   if (char === '"' || char === "'") {
-    return quotedLiteral(text, index, language);
+    return quotedLiteral(text, index, rules);
   }
   return undefined;
 }
 
-export function maskCommentsAndStrings(text: string, language: SourceLanguage): string {
+export function maskWith(text: string, rules: LexicalRules): string {
   const out = text.split('');
   const blank = (from: number, to: number): void => {
     for (let i = Math.max(0, from); i < Math.min(to, text.length); i++) {
@@ -83,33 +90,25 @@ export function maskCommentsAndStrings(text: string, language: SourceLanguage): 
     }
   };
 
-  const cLike = language !== 'python';
   let i = 0;
   while (i < text.length) {
-    const char = text[i];
-
-    if (language === 'python' && char === '#') {
+    if (text.startsWith(rules.lineComment, i)) {
       const end = endOfLine(text, i);
       blank(i, end);
       i = end;
       continue;
     }
-    if (cLike && char === '/' && text[i + 1] === '/') {
-      const end = endOfLine(text, i);
-      blank(i, end);
-      i = end;
-      continue;
-    }
-    if (cLike && char === '/' && text[i + 1] === '*') {
-      const close = text.indexOf('*/', i + 2);
-      const end = close < 0 ? text.length : close + 2;
+    if (rules.blockComment && text.startsWith(rules.blockComment[0], i)) {
+      const [open, close] = rules.blockComment;
+      const closeAt = text.indexOf(close, i + open.length);
+      const end = closeAt < 0 ? text.length : closeAt + close.length;
       blank(i, end);
       i = end;
       continue;
     }
 
     // Skipped over whole, so a `//` inside a string isn't read as a comment.
-    const literal = literalAt(text, i, language);
+    const literal = literalAt(text, i, rules);
     if (literal) {
       blank(literal.contentStart, literal.contentEnd);
       i = Math.max(literal.end, i + 1);

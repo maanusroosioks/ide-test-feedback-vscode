@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { defineAdapter } from './define';
 import { anyExists, pathExists } from '../util/shell';
-import { clearReportDirs, parseJUnitXmlDirectory } from './parsers/junit-xml-parser';
+import { junitReportDirs } from './reports';
 
 /** Matched as a path suffix: a multi-project build writes one per subproject. */
 const REPORT_DIR = 'build/test-results/test';
@@ -25,19 +25,13 @@ export const gradleJunitAdapter = defineAdapter({
 
   detect: (folderPath) => anyExists(folderPath, BUILD_FILES),
 
+  // `cleanTest` covers the default command; clearing the report dirs also covers overrides without it.
   async prepare(folderPath, opts) {
-    const command = opts.commandOverride ?? (await resolveGradleCommand(folderPath));
-    // `cleanTest` covers the default command; this also covers overrides without it.
-    await clearReportDirs(folderPath, REPORT_DIR);
-
-    return {
-      command,
-      parse: (startedAt) =>
-        parseJUnitXmlDirectory(folderPath, {
-          reportDir: REPORT_DIR,
-          since: startedAt,
-          onWarning: (message) => opts.logger?.log(message),
-        }),
-    };
+    return junitReportDirs({
+      folderPath,
+      reportDir: REPORT_DIR,
+      command: opts.commandOverride ?? (await resolveGradleCommand(folderPath)),
+      logger: opts.logger,
+    });
   },
 });

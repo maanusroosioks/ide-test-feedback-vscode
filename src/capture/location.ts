@@ -2,6 +2,9 @@ import { readdir } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { pathExists } from '../util/shell';
 import type { RunLanguage } from '../core/types';
+import { RUN_LANGUAGES, type RunLanguageProfile, type StackFrame } from '../languages';
+
+export type { StackFrame };
 
 export interface SourceLocation {
   file: string;
@@ -9,35 +12,8 @@ export interface SourceLocation {
   line?: number;
 }
 
-export interface StackFrame {
-  className?: string;
-  file: string;
-  line: number;
-}
-
 export type ExistsFn = (path: string) => Promise<boolean>;
 export type ListDirsFn = (path: string) => Promise<string[]>;
-
-const SOURCE_EXTENSIONS: Record<RunLanguage, string[]> = {
-  java: ['.java', '.kt', '.kts', '.scala', '.groovy'],
-  python: ['.py'],
-  csharp: ['.cs'],
-};
-
-const SOURCE_ROOTS: Record<RunLanguage, string[]> = {
-  java: [
-    'src/test/java',
-    'src/main/java',
-    'src/test/kotlin',
-    'src/main/kotlin',
-    'src/test/scala',
-    'src/main/scala',
-    'src',
-    '',
-  ],
-  python: ['', 'src', 'tests', 'test'],
-  csharp: ['', 'src'],
-};
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -53,19 +29,6 @@ const IGNORED_DIRS = new Set([
   'site-packages',
 ]);
 
-/** `at app//com.pkg.FooTest.bar(FooTest.java:42)` — the `app//` prefix is optional. */
-const JVM_FRAME = /\bat\s+([^\s(]+)\(([^()]+):(\d+)\)/g;
-/** CPython traceback: `File "/abs/tests/test_x.py", line 12, in test_bar`. */
-const PYTHON_TRACEBACK_FRAME = /File "([^"]+)", line (\d+)/g;
-/** pytest's own failure report footer: `tests/test_math.py:12: AssertionError`. */
-const PYTEST_REPORT_FRAME = /^\s*([^\s:][^:\n]*\.py):(\d+):/gm;
-/** `at Ns.FooTests.Bar() in C:\src\FooTests.cs:line 42`. */
-const DOTNET_FRAME = /\bin\s+(.+?):line\s+(\d+)/g;
-
-function looksLikeSource(file: string, language: RunLanguage): boolean {
-  return SOURCE_EXTENSIONS[language].some((ext) => file.toLowerCase().endsWith(ext));
-}
-
 function hasDirectorySegment(file: string): boolean {
   return file.includes('/') || file.includes('\\');
 }
@@ -74,66 +37,24 @@ function samePath(a: string, b: string): boolean {
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
-function jvmClassName(qualified: string): string | undefined {
-  const afterModule = qualified.slice(qualified.lastIndexOf('/') + 1);
-  const lastDot = afterModule.lastIndexOf('.');
-  return lastDot > 0 ? afterModule.slice(0, lastDot) : undefined;
-}
-
 interface IndexedFrame {
   index: number;
   frame: StackFrame;
 }
 
-function collect(
-  pattern: RegExp,
-  text: string,
-  build: (match: RegExpExecArray) => StackFrame | undefined,
-  into: IndexedFrame[],
-): void {
-  pattern.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(text)) !== null) {
-    const frame = build(match);
-    if (frame) {
-      into.push({ index: match.index, frame });
-    }
-  }
-}
-
+/** Several rules can match one trace, so frames are put back in the order they appear in it. */
 export function parseStackFrames(stackTrace: string, language: RunLanguage): StackFrame[] {
   const found: IndexedFrame[] = [];
 
-  switch (language) {
-    case 'java':
-      collect(
-        JVM_FRAME,
-        stackTrace,
-        (match) => {
-          const file = match[2];
-          if (!looksLikeSource(file, 'java')) return undefined;
-          return { className: jvmClassName(match[1]), file, line: Number(match[3]) };
-        },
-        found,
-      );
-      break;
-    case 'python': {
-      const toFrame = (match: RegExpExecArray): StackFrame => ({
-        file: match[1],
-        line: Number(match[2]),
-      });
-      collect(PYTHON_TRACEBACK_FRAME, stackTrace, toFrame, found);
-      collect(PYTEST_REPORT_FRAME, stackTrace, toFrame, found);
-      break;
+  for (const { pattern, toFrame } of RUN_LANGUAGES[language].stackFrames) {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(stackTrace)) !== null) {
+      const frame = toFrame(match);
+      if (frame) {
+        found.push({ index: match.index, frame });
+      }
     }
-    case 'csharp':
-      collect(
-        DOTNET_FRAME,
-        stackTrace,
-        (match) => ({ file: match[1].trim(), line: Number(match[2]) }),
-        found,
-      );
-      break;
   }
 
   return found
@@ -168,6 +89,7 @@ export interface TestLocationResolverDeps {
 export class TestLocationResolver {
   private readonly exists: ExistsFn;
   private readonly listDirs: ListDirsFn;
+  private readonly profile: RunLanguageProfile;
   private readonly existsCache = new Map<string, Promise<boolean>>();
   private readonly suiteFiles = new Map<string, Promise<string | undefined>>();
   private readonly frameFiles = new Map<string, Promise<string | undefined>>();
@@ -180,6 +102,7 @@ export class TestLocationResolver {
   ) {
     this.exists = deps.exists ?? pathExists;
     this.listDirs = deps.listDirs ?? defaultListDirs;
+    this.profile = RUN_LANGUAGES[language];
   }
 
   async resolveSuiteFile(testSuite: string | undefined): Promise<string | undefined> {
@@ -249,7 +172,7 @@ export class TestLocationResolver {
   }
 
   private suiteCandidates(testSuite: string): string[] {
-    const extensions = SOURCE_EXTENSIONS[this.language];
+    const extensions = this.profile.sourceExtensions;
     const candidates = extensions.map((ext) => `${this.packagePath(testSuite)}${ext}`);
 
     const segments = testSuite.split('$')[0].split('.');
@@ -268,7 +191,7 @@ export class TestLocationResolver {
   }
 
   private async probeIn(modules: string[], relatives: string[]): Promise<string | undefined> {
-    const roots = SOURCE_ROOTS[this.language];
+    const roots = this.profile.sourceRoots;
     for (const module of modules) {
       for (const root of roots) {
         for (const relative of relatives) {

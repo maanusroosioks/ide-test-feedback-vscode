@@ -1,9 +1,6 @@
 import * as vscode from 'vscode';
 import { AdapterRegistry } from './adapters/registry';
-import { mavenJunitAdapter } from './adapters/maven-junit';
-import { gradleJunitAdapter } from './adapters/gradle-junit';
-import { pytestAdapter } from './adapters/pytest';
-import { dotnetTestAdapter } from './adapters/dotnet-test';
+import { ALL_ADAPTERS } from './adapters';
 import { AuthService } from './auth/authService';
 import { MoodleApiClient } from './services/moodleApiClient';
 import { getAuthScopes, getRequestTimeoutMs, getServiceUrl } from './config/settings';
@@ -19,10 +16,9 @@ import { maybePromptOnboarding, refreshConfiguredContext } from './ui/onboarding
 
 export function activate(context: vscode.ExtensionContext): void {
   const registry = new AdapterRegistry();
-  registry.register(mavenJunitAdapter);
-  registry.register(gradleJunitAdapter);
-  registry.register(pytestAdapter);
-  registry.register(dotnetTestAdapter);
+  for (const adapter of ALL_ADAPTERS) {
+    registry.register(adapter);
+  }
 
   const authService = new AuthService(getAuthScopes);
   const apiClient = new MoodleApiClient({
