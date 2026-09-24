@@ -144,7 +144,7 @@ always has a matching `testFiles` entry.
 | `moodleSubmit.testCommandOverrides` | `{}` | Per-adapter command overrides, e.g. `{ "maven-junit": "mvn -Pci test" }`. |
 | `moodleSubmit.preferredAdapter` | – | Force `maven-junit`, `gradle-junit`, `pytest`, or `dotnet-test` instead of auto-detecting. |
 | `moodleSubmit.submitTestSource` | `true` | Submit the source of each test. Turning this off still submits where each test was found. |
-| `moodleSubmit.maxTotalSourceChars` | `200000` | Cap on the source captured per submission (hard ceiling 500 000). |
+| `moodleSubmit.maxTotalSourceChars` | `500000` | Cap on the source captured per submission (hard ceiling 1 000 000). |
 | `moodleSubmit.warnOnSuspiciousTests` | `true` | Warn before submitting when tests look emptied or disabled. Never blocks. |
 
 ## Supported test frameworks

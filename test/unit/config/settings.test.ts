@@ -40,7 +40,7 @@ describe('settings getters', () => {
     expect(getTestCommandOverrides()).toEqual({});
     expect(getPreferredAdapterId()).toBeUndefined();
     expect(getWarnOnSuspiciousTests()).toBe(true);
-    expect(getSourceCaptureSettings()).toEqual({ captureSource: true, maxTotalChars: 200_000 });
+    expect(getSourceCaptureSettings()).toEqual({ captureSource: true, maxTotalChars: 500_000 });
   });
 
   it('return configured values', () => {
@@ -79,14 +79,14 @@ describe('getSourceCaptureSettings', () => {
 
   it('caps the limit so a huge setting cannot inflate submissions', () => {
     configValues.set('maxTotalSourceChars', 10_000_000);
-    expect(getSourceCaptureSettings().maxTotalChars).toBe(500_000);
+    expect(getSourceCaptureSettings().maxTotalChars).toBe(1_000_000);
   });
 
   it.each([0, -5, Number.NaN, Number.POSITIVE_INFINITY, 'lots'])(
     'falls back to the default for %s',
     (value) => {
       configValues.set('maxTotalSourceChars', value);
-      expect(getSourceCaptureSettings().maxTotalChars).toBe(200_000);
+      expect(getSourceCaptureSettings().maxTotalChars).toBe(500_000);
     },
   );
 });

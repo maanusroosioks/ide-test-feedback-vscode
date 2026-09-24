@@ -111,7 +111,7 @@
         },
         "moodleSubmit.maxTotalSourceChars": {
           "type": "number",
-          "default": 200000,
+          "default": 500000,
           "description": "Largest amount of source captured across one submission. Once it's used up, the remaining files are submitted without their content."
         },
         "moodleSubmit.warnOnSuspiciousTests": {
