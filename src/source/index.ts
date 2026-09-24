@@ -8,7 +8,6 @@ import { scanPython } from './scanPython';
 export type { SourceLanguage, TestDeclaration };
 export { languageForFile } from './language';
 export { maskCommentsAndStrings } from './mask';
-export { normalizeCode } from './normalize';
 export { sliceLines } from './text';
 export { matchDeclaration, normalizeTestName } from './match';
 

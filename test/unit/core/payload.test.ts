@@ -3,12 +3,12 @@ import { buildTestRunRequest, InvalidPayloadError } from '../../../src/core/payl
 import type { NormalizedTestRun } from '../../../src/core/types';
 import type { SubmissionMetadata } from '../../../src/core/submissionMetadata';
 import type { DeclaredSource, TestEvidencePayload } from '../../../src/capture/evidence';
-import type { DeclaredSourceRequest, TestRunRequest } from '../../../src/services/httpTypes';
 
 const metadata: SubmissionMetadata = {
   assignmentKey: 'assignment-101',
   projectName: 'my-project',
   commitHash: 'deadbeef',
+  repoUrl: 'https://github.com/org/repo',
 };
 
 function sampleRun(overrides: Partial<NormalizedTestRun> = {}): NormalizedTestRun {
@@ -41,6 +41,7 @@ describe('buildTestRunRequest', () => {
       ide: 'VSCODE',
       projectName: 'my-project',
       commitHash: 'deadbeef',
+      repoUrl: 'https://github.com/org/repo',
       startedAt: 1000,
       finishedAt: 2000,
       results: [
@@ -66,8 +67,20 @@ describe('buildTestRunRequest', () => {
     expect(() => buildTestRunRequest(sampleRun({ results: [] }), metadata)).toThrow(InvalidPayloadError);
   });
 
-  it('throws InvalidPayloadError when assignmentKey is blank', () => {
-    expect(() => buildTestRunRequest(sampleRun(), { ...metadata, assignmentKey: '  ' })).toThrow(
+  it('throws InvalidPayloadError when there are more results than the gateway accepts', () => {
+    const results = Array.from({ length: 5001 }, (_, index) => ({
+      testName: `test_${index}`,
+      status: 'PASSED' as const,
+    }));
+    expect(() => buildTestRunRequest(sampleRun({ results }), metadata)).toThrow(InvalidPayloadError);
+  });
+
+  it.each([
+    ['blank', '  '],
+    ['too long', 'y'.repeat(101)],
+    ['outside the allowed characters', 'assignment 101'],
+  ])('throws InvalidPayloadError when assignmentKey is %s', (_label, assignmentKey) => {
+    expect(() => buildTestRunRequest(sampleRun(), { ...metadata, assignmentKey })).toThrow(
       InvalidPayloadError,
     );
   });
@@ -91,15 +104,42 @@ describe('buildTestRunRequest', () => {
   });
 
   it('truncates fields exceeding the DTO @Size limits', () => {
-    const longName = 'x'.repeat(300);
     const request = buildTestRunRequest(
-      sampleRun({ results: [{ testSuite: longName, testName: longName, status: 'PASSED' }] }),
-      { ...metadata, assignmentKey: 'y'.repeat(200) },
+      sampleRun({
+        results: [{ testSuite: 'x'.repeat(300), testName: 'x'.repeat(1100), status: 'PASSED' }],
+      }),
+      { ...metadata, projectName: 'p'.repeat(300), commitHash: 'c'.repeat(150) },
     );
 
-    expect(request.assignmentKey).toHaveLength(100);
+    expect(request.projectName).toHaveLength(255);
+    expect(request.commitHash).toHaveLength(100);
     expect(request.results[0].testSuite).toHaveLength(255);
-    expect(request.results[0].testName).toHaveLength(255);
+    expect(request.results[0].testName).toHaveLength(1024);
+  });
+
+  it('drops a repoUrl too long to send rather than cutting it', () => {
+    const request = buildTestRunRequest(sampleRun(), {
+      ...metadata,
+      repoUrl: `https://github.com/org/${'z'.repeat(1100)}`,
+    });
+
+    expect(request.repoUrl).toBeUndefined();
+  });
+
+  it('rounds durations to the whole milliseconds the gateway stores', () => {
+    const request = buildTestRunRequest(
+      sampleRun({ results: [{ testName: 'test_x', status: 'PASSED', durationMs: 12.6 }] }),
+      metadata,
+    );
+
+    expect(request.results[0].durationMs).toBe(13);
+  });
+
+  it('omits timing the gateway would reject', () => {
+    const request = buildTestRunRequest(sampleRun({ startedAt: 2000, finishedAt: 1000 }), metadata);
+
+    expect(request.startedAt).toBeUndefined();
+    expect(request.finishedAt).toBeUndefined();
   });
 });
 
@@ -108,27 +148,15 @@ function declared(payload: TestEvidencePayload): DeclaredSource {
   return payload.sources[0] as DeclaredSource;
 }
 
-function declaredRequest(request: TestRunRequest): DeclaredSourceRequest {
-  return request.results[0].source as DeclaredSourceRequest;
-}
-
 function sampleEvidence(overrides: Partial<TestEvidencePayload> = {}): TestEvidencePayload {
   return {
     sources: [
-      {
-        kind: 'TEST',
-        filePath: 'tests/test_calculator.py',
-        startLine: 4,
-        endLine: 5,
-        code: 'def test_adds():\n    assert add(2, 3) == 5',
-        normalizedCodeHash: 'b'.repeat(64),
-      },
+      { kind: 'TEST', filePath: 'tests/test_calculator.py', startLine: 3, endLine: 4 },
       { kind: 'NONE' },
     ],
     files: [
       {
         path: 'tests/test_calculator.py',
-        sha256: 'c'.repeat(64),
         content: 'import pytest\n\ndef test_adds():\n    assert add(2, 3) == 5\n',
       },
     ],
@@ -143,16 +171,24 @@ describe('buildTestRunRequest — captured source', () => {
     expect(request.results[0].source).toBeUndefined();
   });
 
-  it('attaches source index-aligned with the results', () => {
+  it('attaches source index-aligned with the results, omitting it for an unlocated test', () => {
     const request = buildTestRunRequest(sampleRun(), metadata, sampleEvidence());
 
-    expect(request.results[0].source).toMatchObject({
-      kind: 'TEST',
+    expect(request.results[0].source).toEqual({
       filePath: 'tests/test_calculator.py',
-      startLine: 4,
-      endLine: 5,
+      startLine: 3,
+      endLine: 4,
     });
-    expect(request.results[1].source).toMatchObject({ kind: 'NONE' });
+    expect(request.results[1].source).toBeUndefined();
+  });
+
+  it('sends only the file path for a test that could not be isolated', () => {
+    const request = buildTestRunRequest(sampleRun(), metadata, {
+      ...sampleEvidence(),
+      sources: [{ kind: 'FILE', filePath: 'tests/test_calculator.py' }, { kind: 'NONE' }],
+    });
+
+    expect(request.results[0].source).toEqual({ filePath: 'tests/test_calculator.py' });
   });
 
   it('submits no integrity signals — they exist only to drive the local warning', () => {
@@ -165,13 +201,12 @@ describe('buildTestRunRequest — captured source', () => {
     expect(JSON.stringify(request)).not.toContain('assertionCount');
   });
 
-  it('ships each test file once, with its hash and content', () => {
+  it('ships each test file once, with its content', () => {
     const request = buildTestRunRequest(sampleRun(), metadata, sampleEvidence());
 
     expect(request.testFiles).toEqual([
       {
         path: 'tests/test_calculator.py',
-        sha256: 'c'.repeat(64),
         content: 'import pytest\n\ndef test_adds():\n    assert add(2, 3) == 5\n',
         truncated: undefined,
       },
@@ -182,11 +217,10 @@ describe('buildTestRunRequest — captured source', () => {
     expect(buildTestRunRequest(sampleRun(), metadata).testFiles).toBeUndefined();
   });
 
-  it('carries neither flag on an ordinary run', () => {
+  it('carries no captureDisabled flag on an ordinary run', () => {
     const serialized = JSON.stringify(buildTestRunRequest(sampleRun(), metadata, sampleEvidence()));
 
     expect(serialized).not.toContain('captureDisabled');
-    expect(serialized).not.toContain('warningAcknowledged');
   });
 
   it('reports at the top level that the student switched source capture off', () => {
@@ -198,42 +232,25 @@ describe('buildTestRunRequest — captured source', () => {
     expect(request.captureDisabled).toBe(true);
   });
 
-  it('reports at the top level that the student clicked through the warning', () => {
-    const request = buildTestRunRequest(sampleRun(), metadata, {
-      ...sampleEvidence(),
-      warningAcknowledged: true,
-    });
-
-    expect(request.warningAcknowledged).toBe(true);
-  });
-
-  it('keeps angle brackets in captured source — PARAM_TEXT stripping must not touch code', () => {
+  it('keeps angle brackets in file content — PARAM_TEXT stripping must not touch code', () => {
     const evidence = sampleEvidence();
-    declared(evidence).code =
+    evidence.files[0].content =
       'public void t() {\n    Assert.Throws<DivideByZeroException>(() -> divide(1, 0));\n}';
 
     const request = buildTestRunRequest(sampleRun(), metadata, evidence);
 
-    expect(declaredRequest(request).code).toContain('Assert.Throws<DivideByZeroException>');
+    expect(request.testFiles?.[0].content).toContain('Assert.Throws<DivideByZeroException>');
   });
 
-  it('truncates the file path', () => {
+  it('truncates file paths to the DTO limit', () => {
     const evidence = sampleEvidence();
-    declared(evidence).filePath = `${'p'.repeat(300)}.py`;
+    const longPath = `${'p'.repeat(1100)}.py`;
+    declared(evidence).filePath = longPath;
+    evidence.files[0].path = longPath;
 
     const request = buildTestRunRequest(sampleRun(), metadata, evidence);
 
-    expect(declaredRequest(request).filePath).toHaveLength(255);
-  });
-
-  it('passes the hash through untouched when the code was truncated', () => {
-    const evidence = sampleEvidence();
-    declared(evidence).code = 'def test_adds():\n… [truncated by moodle-test-submit: 12 more characters]';
-    declared(evidence).truncated = true;
-
-    const request = buildTestRunRequest(sampleRun(), metadata, evidence);
-
-    expect(declaredRequest(request).normalizedCodeHash).toBe('b'.repeat(64));
-    expect(declaredRequest(request).truncated).toBe(true);
+    expect(request.results[0].source?.filePath).toHaveLength(1024);
+    expect(request.testFiles?.[0].path).toHaveLength(1024);
   });
 });

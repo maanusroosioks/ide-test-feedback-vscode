@@ -75,12 +75,7 @@ function literalAt(text: string, index: number, language: SourceLanguage): Liter
   return undefined;
 }
 
-function mask(
-  text: string,
-  language: SourceLanguage,
-  maskStrings: boolean,
-  literals?: Array<[number, number]>,
-): string {
+export function maskCommentsAndStrings(text: string, language: SourceLanguage): string {
   const out = text.split('');
   const blank = (from: number, to: number): void => {
     for (let i = Math.max(0, from); i < Math.min(to, text.length); i++) {
@@ -113,11 +108,10 @@ function mask(
       continue;
     }
 
-    // Skipped over even when they're being kept, so a `//` inside a string isn't read as a comment.
+    // Skipped over whole, so a `//` inside a string isn't read as a comment.
     const literal = literalAt(text, i, language);
     if (literal) {
-      literals?.push([literal.contentStart, literal.contentEnd]);
-      if (maskStrings) blank(literal.contentStart, literal.contentEnd);
+      blank(literal.contentStart, literal.contentEnd);
       i = Math.max(literal.end, i + 1);
       continue;
     }
@@ -125,22 +119,4 @@ function mask(
   }
 
   return out.join('');
-}
-
-export function maskCommentsAndStrings(text: string, language: SourceLanguage): string {
-  return mask(text, language, true);
-}
-
-/** One pass for both halves normalisation needs: comments blanked, literal content flagged. */
-export function stripComments(text: string, language: SourceLanguage): { text: string; inLiteral: boolean[] } {
-  const ranges: Array<[number, number]> = [];
-  const stripped = mask(text, language, false, ranges);
-
-  const inLiteral = new Array<boolean>(text.length).fill(false);
-  for (const [start, end] of ranges) {
-    for (let i = Math.max(0, start); i < Math.min(end, text.length); i++) {
-      inLiteral[i] = true;
-    }
-  }
-  return { text: stripped, inLiteral };
 }

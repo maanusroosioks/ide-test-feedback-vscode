@@ -298,23 +298,10 @@ export function registerTestController(
         ...getSourceCaptureSettings(),
       });
       const { sources, files } = evidence.payload;
-      let located = 0;
-      // Snippets are the fallback for lines their file could not carry, so counting them as the
-      // captured total would read as a failure on the normal path, where every file went whole.
-      let snippets = 0;
-      let chars = 0;
-      for (const source of sources) {
-        if (source.kind !== 'TEST') continue;
-        located++;
-        if (source.code === undefined) continue;
-        snippets++;
-        chars += source.code.length;
-      }
+      const located = sources.filter((source) => source.kind === 'TEST').length;
       const fileChars = files.reduce((total, file) => total + (file.content?.length ?? 0), 0);
-      const fallback = snippets > 0 ? `, plus ${snippets} snippet(s) (${chars} chars)` : '';
       deps.logger.log(
-        `Located ${located}/${run.results.length} tests in ${files.length} file(s) ` +
-          `(${fileChars} chars)${fallback}.`,
+        `Located ${located}/${run.results.length} tests in ${files.length} file(s) (${fileChars} chars).`,
       );
       return evidence;
     } catch (error) {
@@ -376,7 +363,6 @@ export function registerTestController(
       }
 
       const evidence = await gatherEvidence(run, folder, resolver);
-      let evidencePayload = evidence?.payload;
       if (evidence) {
         const findings = describeSuspiciousTests(evidence.integrity);
         for (const finding of findings) {
@@ -388,7 +374,6 @@ export function registerTestController(
             testRun.appendOutput(toCrlf('\nSubmission cancelled.\n'));
             return;
           }
-          evidencePayload = { ...evidence.payload, warningAcknowledged: true };
         }
       }
 
@@ -399,7 +384,7 @@ export function registerTestController(
           folderPath: folder.uri.fsPath,
           projectName: folder.name,
           assignmentKeySetting: getAssignmentKeySetting(),
-          evidence: evidencePayload,
+          evidence: evidence?.payload,
         },
         { apiClient: deps.apiClient, logger: deps.logger },
       );

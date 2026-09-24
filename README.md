@@ -80,45 +80,35 @@ Current limitations:
 
 ## What gets submitted
 
-Each run posts the results **and the source of the tests that produced them**. Per test:
+Each run posts the results **and the test files that produced them**. Per test:
 
 - `testSuite`, `testName`, `status`, `durationMs`, and the failure `message`
-- `source` — the code of that individual test (`kind: "TEST"`), with its file path
-  relative to the workspace folder and its line range. When a test can't be matched to a
-  declaration its file stands in for it (`kind: "FILE"`); when the file can't be found at
-  all, `kind: "NONE"` and only the framework's own report is sent. `kind` describes what
-  was found, not what was sent — with capture off, or once the size budget is spent, the
-  code is omitted but the path, line range and hash still stand
-- `source.normalizedCodeHash` — SHA-256 of the test with comments dropped and formatting
-  normalized, so reformatting or reindenting your code doesn't look like a change. It
-  ignores only what carries no meaning: spacing *inside* a string literal counts, and in
-  Python so does relative indentation, since moving a line out of an `if` block changes
-  what runs.
+- `source` — where the test lives: its file path relative to the workspace folder, and the
+  line range of its declaration. When a test can't be matched to a declaration only
+  `filePath` is sent; when the file can't be found at all, `source` is omitted and only the
+  framework's own report is sent.
 
 Alongside the results, `testFiles` carries **each test file once** — its workspace-relative
-path, a SHA-256 of its contents, and the contents themselves. That's what covers imports,
-fixtures and setup methods, none of which appear in any single test's snippet. A result
-whose test couldn't be isolated (`kind: "FILE"`) carries no code of its own and is read
-from here via its `filePath`, so a framework the extension can't parse costs one copy of
-the file rather than one copy per test.
+path and its contents. A test's code is read by slicing its line range out of its file, so no
+test body is sent twice, and imports, fixtures and setup methods come along with it. With
+capture off, or once the size budget is spent, a file is listed without its `content`.
 
-Deliberately **not** submitted: raw stack traces or any hash of one, absolute file paths (a
-path outside the workspace folder is reduced to its filename), and anything about your
-machine or account beyond the identity in your sign-in token.
+Deliberately **not** submitted: raw stack traces, absolute file paths (a path outside the
+workspace folder is reduced to its filename), and anything about your machine or account
+beyond the identity in your sign-in token.
 
-Two flags are sent alongside the results, and only when they apply:
+One flag is sent alongside the results, and only when it applies:
 
 - `captureDisabled` — you switched source capture off. Without it, a submission with no
   code would be indistinguishable from one where the extension couldn't find your sources.
-- `warningAcknowledged` — you were shown the pre-submit warning below and submitted anyway.
 
 ### The pre-submit check is local
 
 The extension checks your tests for empty bodies, missing assertions and skip markers such
 as `@Disabled` or `@pytest.mark.skip`, and warns you before submitting if a run looks
-degraded. The findings themselves stay on your machine — **no counts and no per-test flags
-are submitted**, only the single `warningAcknowledged` flag recording that the warning was
-shown. It's there to catch a test you accidentally emptied or left disabled.
+degraded. The findings stay on your machine — **nothing about the check is submitted**,
+including whether the warning was shown. It's there to catch a test you accidentally
+emptied or left disabled.
 
 It never blocks a submission, and it can be switched off with
 `moodleSubmit.warnOnSuspiciousTests` — which silences the dialog but does not change what
@@ -128,37 +118,18 @@ What your instructor reads is the test code itself, which is the thing worth rea
 
 ### For the gateway and Moodle plugin
 
-`source.code` and `testFiles[].content` carry code verbatim, including `<` and `>`
-(`List<String>`, `Assert.Throws<T>`). They **must** be declared `PARAM_RAW` on the Moodle
-side — running them through `PARAM_TEXT` would strip those via `strip_tags`. The extension does sanitize
+`testFiles[].content` carries code verbatim, including `<` and `>` (`List<String>`,
+`Assert.Throws<T>`). It **must** be declared `PARAM_RAW` on the Moodle side — running it
+through `PARAM_TEXT` would strip those via `strip_tags`. The extension does sanitize
 `testSuite`, `testName` and `message` for `PARAM_TEXT`, since those are display fields.
-If `PARAM_RAW` turns out not to be available, a base64 `codeBase64` field is a purely
-additive follow-up.
 
-`normalizedCodeHash` is always taken over the *untruncated* snippet, so when `truncated`
-is true it deliberately does not correspond to `code`. Never hash `code` itself.
+Join a result to its file with `source.filePath` == `testFiles[].path`, then slice
+`startLine`..`endLine` (1-based, inclusive) out of `content`. Content is LF-normalized, and a
+`truncated` file is cut at a character boundary, so line numbers still hold for what remains.
 
-**No per-test integrity signals are sent** — no assertion counts, no empty-body or skip
-flags, no run-level summary. Everything a receiver might want from those is derivable from
-`code`, and a client-computed summary is both weaker than reading the code and the
-convenient thing to trust instead of it. The only two client-side facts submitted are
-top-level `captureDisabled` and `warningAcknowledged`, both present only when true, and
-neither derivable from anything else in the body. Judgement stays on your side.
-
-The hashes are for comparing a student's run against **their own previous run** — there is
-no reference set. `normalizedCodeHash` answers "changed, or only reformatted?" without
-needing language-aware normalization on your side. `testFiles[].sha256` answers the one
-question the snippets can't: a test the student added shows up as a new result, so an
-unchanged set of test bodies plus a changed file hash means the edit was in imports,
-setup, fixtures or helpers — and `content` lets you see which.
-
-Join a result to its file with `source.filePath` == `testFiles[].path`. Budget order is
-snippets first, then file contents, so a pathological project degrades to a working
-per-result view rather than losing it; a file whose content didn't fit still carries its
-`sha256`.
-
-All of these fields are optional additions; a gateway that doesn't know about them
-ignores them and the submission still succeeds.
+The extension keeps to the gateway's validation limits before sending: an `assignmentKey`
+of at most 100 characters from `[A-Za-z0-9_-]`, at most 5000 results and 200 test files,
+and the `@Size` limits on each text field.
 
 ## Settings
 
@@ -170,8 +141,7 @@ ignores them and the submission still succeeds.
 | `moodleSubmit.authScopes` | Entra ID scopes for the standard service | OAuth scopes requested from the Microsoft provider. Change only for a different deployment. |
 | `moodleSubmit.testCommandOverrides` | `{}` | Per-adapter command overrides, e.g. `{ "maven-junit": "mvn -Pci test" }`. |
 | `moodleSubmit.preferredAdapter` | – | Force `maven-junit`, `gradle-junit`, `pytest`, or `dotnet-test` instead of auto-detecting. |
-| `moodleSubmit.submitTestSource` | `true` | Submit the source of each test. Turning this off still submits checksums. |
-| `moodleSubmit.maxTestSourceChars` | `8000` | Cap on the source captured for one test (hard ceiling 20 000). |
+| `moodleSubmit.submitTestSource` | `true` | Submit the source of each test. Turning this off still submits where each test was found. |
 | `moodleSubmit.maxTotalSourceChars` | `200000` | Cap on the source captured per submission (hard ceiling 500 000). |
 | `moodleSubmit.warnOnSuspiciousTests` | `true` | Warn before submitting when tests look emptied or disabled. Never blocks. |
 

@@ -1,11 +1,13 @@
 import type { NormalizedTestRun } from './types';
 import type { SubmissionMetadata } from './submissionMetadata';
 import type { TestEvidencePayload, TestSource, TestSourceFile } from '../capture/evidence';
-import type {
-  TestResultRequest,
-  TestRunRequest,
-  TestSourceFileRequest,
-  TestSourceRequest,
+import {
+  ASSIGNMENT_KEY_PATTERN,
+  REQUEST_LIMITS,
+  type TestResultRequest,
+  type TestRunRequest,
+  type TestSourceFileRequest,
+  type TestSourceRequest,
 } from '../services/httpTypes';
 import { MoodleSubmitError } from './errors';
 
@@ -14,9 +16,6 @@ export class InvalidPayloadError extends MoodleSubmitError {
     return `Invalid submission: ${this.message}`;
   }
 }
-
-const MAX_255 = 255;
-const MAX_100 = 100;
 
 function truncate(value: string | undefined, max: number): string | undefined {
   if (value === undefined) return undefined;
@@ -32,29 +31,48 @@ function textField(value: string | undefined, max: number): string | undefined {
   return truncate(sanitizeForParamText(value), max);
 }
 
-function toSourceRequest(source: TestSource): TestSourceRequest {
-  if (source.kind === 'NONE') return { kind: 'NONE' };
+/** A cut-off URL points somewhere else entirely, so one that doesn't fit is dropped instead. */
+function repoUrlField(value: string | undefined): string | undefined {
+  return value !== undefined && value.length <= REQUEST_LIMITS.repoUrl ? value : undefined;
+}
 
-  const filePath = truncate(source.filePath, MAX_255) as string;
-  if (source.kind === 'FILE') {
-    return { kind: 'FILE', filePath, normalizedCodeHash: source.normalizedCodeHash };
+function durationField(durationMs: number | undefined): number | undefined {
+  if (durationMs === undefined || !Number.isFinite(durationMs)) return undefined;
+  return Math.min(Math.max(0, Math.round(durationMs)), REQUEST_LIMITS.durationMs);
+}
+
+/** The gateway rejects a whole run over bad timing, and timing is the least important part of it. */
+function timingFields(run: NormalizedTestRun): Pick<TestRunRequest, 'startedAt' | 'finishedAt'> {
+  const { startedAt, finishedAt } = run;
+  if (startedAt < 0 || finishedAt < startedAt) return {};
+  return { startedAt, finishedAt };
+}
+
+function validateAssignmentKey(assignmentKey: string): void {
+  if (!assignmentKey.trim()) {
+    throw new InvalidPayloadError('assignmentKey must not be blank.');
   }
+  if (assignmentKey.length > REQUEST_LIMITS.assignmentKey) {
+    throw new InvalidPayloadError(
+      `assignmentKey must be at most ${REQUEST_LIMITS.assignmentKey} characters.`,
+    );
+  }
+  if (!ASSIGNMENT_KEY_PATTERN.test(assignmentKey)) {
+    throw new InvalidPayloadError("assignmentKey may only contain letters, digits, '_' and '-'.");
+  }
+}
 
-  return {
-    kind: 'TEST',
-    filePath,
-    startLine: source.startLine,
-    endLine: source.endLine,
-    code: source.code,
-    truncated: source.truncated,
-    normalizedCodeHash: source.normalizedCodeHash,
-  };
+function toSourceRequest(source: TestSource): TestSourceRequest | undefined {
+  if (source.kind === 'NONE') return undefined;
+
+  const filePath = truncate(source.filePath, REQUEST_LIMITS.path) as string;
+  if (source.kind === 'FILE') return { filePath };
+  return { filePath, startLine: source.startLine, endLine: source.endLine };
 }
 
 function toSourceFileRequest(file: TestSourceFile): TestSourceFileRequest {
   return {
-    path: truncate(file.path, MAX_255) as string,
-    sha256: file.sha256,
+    path: truncate(file.path, REQUEST_LIMITS.path) as string,
     content: file.content,
     truncated: file.truncated,
   };
@@ -68,9 +86,12 @@ export function buildTestRunRequest(
   if (run.results.length === 0) {
     throw new InvalidPayloadError('Test run produced no results — nothing to submit.');
   }
-  if (!metadata.assignmentKey.trim()) {
-    throw new InvalidPayloadError('assignmentKey must not be blank.');
+  if (run.results.length > REQUEST_LIMITS.results) {
+    throw new InvalidPayloadError(
+      `Test run produced ${run.results.length} results; at most ${REQUEST_LIMITS.results} can be submitted.`,
+    );
   }
+  validateAssignmentKey(metadata.assignmentKey);
 
   const results: TestResultRequest[] = run.results.map((testCase, index): TestResultRequest => {
     if (!testCase.testName.trim()) {
@@ -78,25 +99,26 @@ export function buildTestRunRequest(
     }
     const source = evidence?.sources[index];
     return {
-      testSuite: textField(testCase.testSuite, MAX_255),
-      testName: textField(testCase.testName, MAX_255) as string,
+      testSuite: textField(testCase.testSuite, REQUEST_LIMITS.testSuite),
+      testName: textField(testCase.testName, REQUEST_LIMITS.testName) as string,
       status: testCase.status,
-      durationMs: testCase.durationMs !== undefined ? Math.max(0, testCase.durationMs) : undefined,
+      durationMs: durationField(testCase.durationMs),
       message: sanitizeForParamText(testCase.message),
       source: source ? toSourceRequest(source) : undefined,
     };
   });
 
+  const testFiles = evidence?.files.slice(0, REQUEST_LIMITS.testFiles).map(toSourceFileRequest);
+
   return {
-    assignmentKey: truncate(metadata.assignmentKey, MAX_100) as string,
+    assignmentKey: metadata.assignmentKey,
     ide: 'VSCODE',
-    projectName: truncate(metadata.projectName, MAX_255),
-    commitHash: truncate(metadata.commitHash, MAX_100),
-    startedAt: run.startedAt,
-    finishedAt: run.finishedAt,
+    projectName: truncate(metadata.projectName, REQUEST_LIMITS.projectName),
+    commitHash: truncate(metadata.commitHash, REQUEST_LIMITS.commitHash),
+    repoUrl: repoUrlField(metadata.repoUrl),
+    ...timingFields(run),
     results,
-    testFiles: evidence && evidence.files.length > 0 ? evidence.files.map(toSourceFileRequest) : undefined,
+    testFiles: testFiles && testFiles.length > 0 ? testFiles : undefined,
     captureDisabled: evidence?.captureDisabled,
-    warningAcknowledged: evidence?.warningAcknowledged,
   };
 }

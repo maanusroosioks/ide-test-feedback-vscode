@@ -1,9 +1,8 @@
 export type TestStatus = 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
 
 /**
- * How far the test was resolved in the project's source, independent of whether its code was
- * captured — `code` may be absent from any of these when capture is off or the budget ran out.
- * `TEST` — the declaration, located by line range within its file. `FILE` — only the file itself.
+ * How far the test was resolved in the project's source, independent of whether its file's content
+ * was captured. `TEST` — the declaration, located by line range within its file. `FILE` — only the file itself.
  * `NONE` — not found at all, so there is nothing but the framework's own report.
  */
 export type TestSourceKind = 'TEST' | 'FILE' | 'NONE';

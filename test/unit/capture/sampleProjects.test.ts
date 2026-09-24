@@ -33,7 +33,6 @@ async function evidenceFor(folder: string, run: NormalizedTestRun): Promise<Test
   return collectTestEvidence(run, new TestLocationResolver(folder, run.language), {
     folderPath: folder,
     captureSource: true,
-    maxTestChars: 8000,
     maxTotalChars: 200000,
   });
 }
@@ -46,15 +45,13 @@ function run(
   return { adapterId, language, startedAt: 1000, finishedAt: 2000, results };
 }
 
-/** Reads a test back the way the grader has to: slice its file, falling back to the snippet. */
+/** Reads a test back the way the grader has to: slice it out of its file. */
 function codeFor(evidence: TestEvidence, index: number): string {
   const source = sourcesOf(evidence)[index];
   expect(source.kind).toBe('TEST');
   const file = evidence.payload.files.find((candidate) => candidate.path === source.filePath);
-  if (file?.content && !file.truncated) {
-    return sliceLines(file.content, source.startLine as number, source.endLine as number);
-  }
-  return source.code as string;
+  expect(file?.truncated).toBeUndefined();
+  return sliceLines(file?.content as string, source.startLine as number, source.endLine as number);
 }
 
 function located(evidence: TestEvidence): number {
@@ -96,9 +93,7 @@ describe.skipIf(!existsSync(pythonSample))('python-sample', () => {
 
     expect(codeFor(evidence, 1)).toContain('@pytest.mark.parametrize');
     expect(codeFor(evidence, 1)).toContain('assert divide(a, b) == expected');
-    expect(sourcesOf(evidence)[1].normalizedCodeHash).toBe(
-      sourcesOf(evidence)[2].normalizedCodeHash,
-    );
+    expect(sourcesOf(evidence)[1].startLine).toBe(sourcesOf(evidence)[2].startLine);
     expect(codeFor(evidence, 1)).not.toContain('def test_divide_by_zero_raises');
   });
 
@@ -170,7 +165,11 @@ describe.skipIf(!existsSync(dotnetSample))('dotnet-sample', () => {
 
     // Sanitized for Moodle PARAM_TEXT, but the captured code must survive verbatim.
     expect(request.testFiles?.[0].content).toContain('Assert.Throws<DivideByZeroException>');
-    expect((request.results[2].source as DeclaredSource).normalizedCodeHash).toHaveLength(64);
+    expect(request.results[2].source).toEqual({
+      filePath: 'CalculatorTests.cs',
+      startLine: (evidence.payload.sources[2] as DeclaredSource).startLine,
+      endLine: (evidence.payload.sources[2] as DeclaredSource).endLine,
+    });
     expect(request).not.toHaveProperty('integrity');
   });
 });

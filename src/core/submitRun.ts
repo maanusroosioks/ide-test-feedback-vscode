@@ -1,7 +1,12 @@
 import type { MoodleApiClient, SubmitResult } from '../services/moodleApiClient';
 import type { Logger } from './ports';
 import { buildTestRunRequest } from './payload';
-import { readGitCommitHash, readWorkspaceConfigFile, resolveSubmissionMetadata } from './submissionMetadata';
+import {
+  readGitCommitHash,
+  readGitRemoteUrl,
+  readWorkspaceConfigFile,
+  resolveSubmissionMetadata,
+} from './submissionMetadata';
 import type { TestEvidencePayload } from '../capture/evidence';
 import type { NormalizedTestRun } from './types';
 
@@ -24,11 +29,16 @@ export async function submitRun(
   { apiClient, logger }: SubmitRunDeps,
 ): Promise<SubmitResult> {
   const workspaceFile = await readWorkspaceConfigFile(folderPath);
+  const [gitCommitHash, gitRemoteUrl] = await Promise.all([
+    readGitCommitHash(folderPath),
+    readGitRemoteUrl(folderPath),
+  ]);
   const metadata = resolveSubmissionMetadata({
     workspaceFile,
     assignmentKeySetting,
     defaultProjectName: projectName,
-    gitCommitHash: await readGitCommitHash(folderPath),
+    gitCommitHash,
+    gitRemoteUrl,
   });
 
   const payload = buildTestRunRequest(run, metadata, evidence);
