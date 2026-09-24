@@ -1,15 +1,16 @@
-import { matchBackward, matchForward, skipSpaceBackward } from './text';
+import { matchBackward, matchForward, skipBackward, skipForward, skipSpaceBackward } from './text';
 
 /** How a family of languages writes the markers (annotations, attributes) that precede a declaration. */
 export interface MarkerSyntax {
   opener: string;
-  /** Start of the marker ending just before `before`, or undefined when none does. */
-  previousMarkerStart(masked: string, before: number): number | undefined;
+  /** Start of the marker ending just before `before`, or -1 when none does. */
+  previousMarkerStart(masked: string, before: number): number;
   /** End (exclusive) of the marker opening at `start`, or -1. */
   markerEnd(masked: string, start: number): number;
 }
 
 const ANNOTATION_NAME = /[\p{L}\p{N}_.]/u;
+const INLINE_SPACE = /[ \t]/;
 
 /** `@Test`, `@DisplayName("x")`, `@org.junit.jupiter.api.Test`. */
 export const ANNOTATIONS: MarkerSyntax = {
@@ -17,30 +18,24 @@ export const ANNOTATIONS: MarkerSyntax = {
 
   previousMarkerStart(masked, before) {
     let i = skipSpaceBackward(masked, before - 1);
-    if (i < 0) return undefined;
     if (masked[i] === ')') {
       const open = matchBackward(masked, i, '(', ')');
-      if (open < 0) return undefined;
+      if (open < 0) return -1;
       i = skipSpaceBackward(masked, open - 1);
     }
-    let name = i;
-    while (name >= 0 && ANNOTATION_NAME.test(masked[name])) name--;
-    if (name === i) return undefined;
-    let at = name;
-    while (at >= 0 && /[ \t]/.test(masked[at])) at--;
-    return at < 0 || masked[at] !== '@' ? undefined : at;
+    const name = skipBackward(masked, i, ANNOTATION_NAME);
+    if (name === i) return -1;
+    const at = skipBackward(masked, name, INLINE_SPACE);
+    return masked[at] === '@' ? at : -1;
   },
 
   markerEnd(masked, start) {
-    let j = start + 1;
     // `@ Test` is legal, if unusual.
-    while (j < masked.length && /[ \t]/.test(masked[j])) j++;
-    while (j < masked.length && ANNOTATION_NAME.test(masked[j])) j++;
+    const nameEnd = skipForward(masked, skipForward(masked, start + 1, INLINE_SPACE), ANNOTATION_NAME);
     // Only spaces/tabs, never a newline: otherwise `@Test\nvoid foo()` eats the parameter list.
-    let k = j;
-    while (k < masked.length && /[ \t]/.test(masked[k])) k++;
-    if (masked[k] !== '(') return j;
-    const close = matchForward(masked, k, '(', ')');
+    const paren = skipForward(masked, nameEnd, INLINE_SPACE);
+    if (masked[paren] !== '(') return nameEnd;
+    const close = matchForward(masked, paren, '(', ')');
     return close < 0 ? -1 : close + 1;
   },
 };
@@ -51,9 +46,7 @@ export const ATTRIBUTES: MarkerSyntax = {
 
   previousMarkerStart(masked, before) {
     const i = skipSpaceBackward(masked, before - 1);
-    if (i < 0 || masked[i] !== ']') return undefined;
-    const open = matchBackward(masked, i, '[', ']');
-    return open < 0 ? undefined : open;
+    return masked[i] === ']' ? matchBackward(masked, i, '[', ']') : -1;
   },
 
   markerEnd(masked, start) {
@@ -67,7 +60,7 @@ export function expandMarkersBackward(masked: string, offset: number, syntax: Ma
   let start = offset;
   for (;;) {
     const previous = syntax.previousMarkerStart(masked, start);
-    if (previous === undefined) return start;
+    if (previous < 0) return start;
     start = previous;
   }
 }
@@ -82,7 +75,7 @@ export function collectMarkers(
   let i = start;
 
   for (;;) {
-    while (i < masked.length && /\s/.test(masked[i])) i++;
+    i = skipForward(masked, i, /\s/);
     if (masked[i] !== syntax.opener) break;
     const end = syntax.markerEnd(masked, i);
     if (end < 0) break;

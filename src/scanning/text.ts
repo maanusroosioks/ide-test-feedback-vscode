@@ -26,11 +26,25 @@ export function sliceLines(text: string, startLine: number, endLine: number): st
   return text.slice(from, to).replace(/\r?\n$/, '');
 }
 
+// The bounds checks matter: `pattern.test(undefined)` tests the string "undefined".
+
+/** First index at or after `from` that doesn't match `pattern`, or `text.length`. */
+export function skipForward(text: string, from: number, pattern: RegExp): number {
+  let i = from;
+  while (i < text.length && pattern.test(text[i])) i++;
+  return i;
+}
+
+/** Last index at or before `from` that doesn't match `pattern`, or -1. */
+export function skipBackward(text: string, from: number, pattern: RegExp): number {
+  let i = from;
+  while (i >= 0 && pattern.test(text[i])) i--;
+  return i;
+}
+
 /** Last index at or before `from` that isn't whitespace, or -1. */
 export function skipSpaceBackward(masked: string, from: number): number {
-  let i = from;
-  while (i >= 0 && /\s/.test(masked[i])) i--;
-  return i;
+  return skipBackward(masked, from, /\s/);
 }
 
 // ---------------------------------------------------------------- delimiters ----
@@ -53,8 +67,8 @@ export function matchBackward(masked: string, closeIndex: number, open: string, 
   return -1;
 }
 
-const OPENERS = '([{';
-const CLOSERS = ')]}';
+export const OPENERS = '([{';
+export const CLOSERS = ')]}';
 
 export interface ScanOptions {
   /** Treat a closer that has no opener in range as a stop, rather than walking past it. */

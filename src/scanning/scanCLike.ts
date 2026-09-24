@@ -1,6 +1,15 @@
 import { collectMarkers, expandMarkersBackward, type MarkerSyntax } from './markers';
 import type { TestDeclaration } from './types';
-import { lineOf, lineStarts, matchBackward, matchForward, scanTopLevel, skipSpaceBackward } from './text';
+import {
+  lineOf,
+  lineStarts,
+  matchBackward,
+  matchForward,
+  scanTopLevel,
+  skipBackward,
+  skipForward,
+  skipSpaceBackward,
+} from './text';
 
 export interface CLikeDialect {
   /** Keywords that open a named type body, e.g. `class`, `struct`. */
@@ -43,8 +52,7 @@ function readNameBackward(
     return open < 0 ? undefined : { name: text.slice(open + 1, i), start: open };
   }
 
-  let j = i;
-  while (j >= 0 && /[\p{L}\p{N}_$]/u.test(masked[j])) j--;
+  const j = skipBackward(masked, i, /[\p{L}\p{N}_$]/u);
   return j === i ? undefined : { name: text.slice(j + 1, i + 1), start: j + 1 };
 }
 
@@ -53,10 +61,10 @@ function modifiersStart(masked: string, keyword: number): number {
   let start = keyword;
   for (;;) {
     const end = skipSpaceBackward(masked, start - 1);
-    let word = end;
-    while (word >= 0 && /[a-z]/.test(masked[word])) word--;
-    // Part of a longer name, an annotation or a member access: not a modifier.
-    if (word === end || (word >= 0 && /[\p{L}\p{N}_$@.]/u.test(masked[word]))) return start;
+    const word = skipBackward(masked, end, /[a-z]/);
+    // Preceded by a name character, `@` or `.`: part of a longer name, an annotation or a member access.
+    const isModifier = word < end && !/[\p{L}\p{N}_$@.]/u.test(masked[word] ?? '');
+    if (!isModifier) return start;
     start = word + 1;
   }
 }
@@ -94,7 +102,7 @@ function scanTypeRanges(
       name: match[1],
       start: keyword,
       end,
-      markers: markerStart < keyword ? collectMarkers(text, masked, markerStart, syntax).markers : [],
+      markers: collectMarkers(text, masked, markerStart, syntax).markers,
     });
   }
 
@@ -151,9 +159,8 @@ function readBody(text: string, masked: string, from: number, dialect: CLikeDial
       continue;
     }
 
-    let start = stop + (masked[stop + 1] === '>' ? 2 : 1);
     // Kotlin's `fun f() =` may break the line before the expression.
-    while (start < masked.length && /\s/.test(masked[start])) start++;
+    const start = skipForward(masked, stop + (masked[stop + 1] === '>' ? 2 : 1), /\s/);
     const endOffset = expressionEnd(masked, start, dialect);
     return { endOffset, bodyText: text.slice(start, endOffset).trim() };
   }

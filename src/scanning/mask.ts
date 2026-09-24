@@ -64,35 +64,31 @@ function quotedLiteral(text: string, quoteIndex: number, rules: LexicalRules, st
 
   let i = contentStart;
   while (i < text.length) {
-    if (escapes && text[i] === '\\') {
+    // `\x`, or a verbatim string's `""`.
+    if ((escapes && text[i] === '\\') || (style.verbatim && text.startsWith(quote + quote, i))) {
       i += 2;
-      continue;
-    }
-    if (hole && text.startsWith(hole, i)) {
-      // A doubled opener is an escaped brace, `{{`.
-      if (text.startsWith(hole, i + hole.length)) {
-        i += 2 * hole.length;
-        continue;
-      }
-      const end = holeEnd(text, i + hole.length, rules);
-      // A hole left open mid-edit must not carry a one-line string past its line.
-      i = singleLine && end > endOfLine(text, i) ? i + hole.length : end;
-      continue;
-    }
-    if (text.startsWith(delimiter, i)) {
-      if (style.verbatim && text[i + 1] === quote) {
-        i += 2;
-        continue;
-      }
+    } else if (hole && text.startsWith(hole, i)) {
+      i = skipHole(text, i, hole, singleLine, rules);
+    } else if (text.startsWith(delimiter, i)) {
       return { contentStart, contentEnd: i, end: i + delimiter.length };
-    }
-    // An unterminated single-line string must not swallow the rest of the file.
-    if (singleLine && text[i] === '\n') {
+    } else if (singleLine && text[i] === '\n') {
+      // An unterminated single-line string must not swallow the rest of the file.
       return { contentStart, contentEnd: i, end: i };
+    } else {
+      i++;
     }
-    i++;
   }
   return { contentStart, contentEnd: text.length, end: text.length };
+}
+
+/** Index just past the hole whose opener is at `start`. */
+function skipHole(text: string, start: number, hole: string, singleLine: boolean, rules: LexicalRules): number {
+  const afterOpener = start + hole.length;
+  // A doubled opener is an escaped brace, `{{`.
+  if (text.startsWith(hole, afterOpener)) return afterOpener + hole.length;
+  const end = holeEnd(text, afterOpener, rules);
+  // A hole left open mid-edit must not carry a one-line string past its line.
+  return singleLine && end > endOfLine(text, start) ? afterOpener : end;
 }
 
 function literalAt(text: string, index: number, rules: LexicalRules): Literal | undefined {
@@ -104,9 +100,10 @@ function literalAt(text: string, index: number, rules: LexicalRules): Literal | 
   // A prefix starts a token: the `f` closing `if"a"` is part of the keyword.
   if (prefixes[text[index]] !== undefined && !/[\p{L}\p{N}_]/u.test(text[index - 1] ?? '')) {
     while (prefixes[text[quoteIndex]] !== undefined) {
-      const kind = prefixes[text[quoteIndex++]];
+      const kind = prefixes[text[quoteIndex]];
       verbatim ||= kind === 'verbatim';
       interpolated ||= kind === 'interpolated';
+      quoteIndex++;
     }
   }
 
