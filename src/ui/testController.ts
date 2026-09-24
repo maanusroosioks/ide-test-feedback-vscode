@@ -7,11 +7,8 @@ import {
   getWarnOnSuspiciousTests,
 } from '../config/settings';
 import { TestLocationResolver, type SourceLocation } from '../capture/location';
-import {
-  collectTestEvidence,
-  describeSuspiciousTests,
-  type TestEvidence,
-} from '../capture/evidence';
+import { collectTestEvidence, type TestEvidence } from '../capture/evidence';
+import { describeSuspiciousTests } from '../capture/integrity';
 import {
   folderItemId,
   suiteDescription,
@@ -21,7 +18,7 @@ import {
   testItemId,
   type KnownTest,
 } from './testTree';
-import { runTests, summarize } from '../core/testRunner';
+import { runTests } from '../core/testRunner';
 import { pickAdapter, resolveWorkspaceFolder } from './workspacePicker';
 import { submitRun } from '../core/submitRun';
 import type { NormalizedTestCase, NormalizedTestRun } from '../core/types';
@@ -348,7 +345,7 @@ export function registerTestController(
 
       deps.status.running();
       report?.('Running tests…');
-      const run = await runTests(deps.registry, folder.uri.fsPath, {
+      const { run, summary } = await runTests(deps.registry, folder.uri.fsPath, {
         logger: deps.logger,
         signal: controllerAbort.signal,
         onOutput: (chunk) => testRun.appendOutput(toCrlf(chunk)),
@@ -359,7 +356,6 @@ export function registerTestController(
       // results, for source capture, cost no extra filesystem work.
       const resolver = new TestLocationResolver(folder.uri.fsPath, run.language);
       await applyResults(testRun, folder, run, resolver);
-      const summary = summarize(run);
       deps.status.result(summary);
 
       if (!submit) {
@@ -374,7 +370,7 @@ export function registerTestController(
           deps.logger.log(`Integrity warning: ${describeFinding(finding)}`);
         }
         if (findings.length > 0 && getWarnOnSuspiciousTests()) {
-          if (!(await confirmDegradedRun(findings, run.results.length))) {
+          if (!(await confirmDegradedRun(findings, summary.total))) {
             deps.logger.log('Submission cancelled at the integrity warning.');
             testRun.appendOutput(toCrlf('\nSubmission cancelled.\n'));
             return;
@@ -412,23 +408,13 @@ export function registerTestController(
 
   // Only one profile — submitting is the separate runAndSubmit command
   // (toolbar button + context menu), not a second profile to switch between.
-  const runHandler = async (
-    request: vscode.TestRunRequest,
-    token: vscode.CancellationToken,
-  ): Promise<void> => {
-    const abort = new AbortController();
-    const sub = token.onCancellationRequested(() => abort.abort());
+  // No handler-token wiring: the run created for this request shares its cancellation, and
+  // performRun already listens on `testRun.token`.
+  const runHandler = async (request: vscode.TestRunRequest): Promise<void> => {
     try {
-      await performRun({
-        folder: await folderForRequest(request),
-        submit: false,
-        request,
-        signal: abort.signal,
-      });
+      await performRun({ folder: await folderForRequest(request), submit: false, request });
     } catch (error) {
       handleCommandError(error, deps.logger, deps.status);
-    } finally {
-      sub.dispose();
     }
   };
 

@@ -9,7 +9,9 @@ export interface Logger {
 export interface RunSummary {
   total: number;
   passed: number;
+  /** Includes errored tests. */
   failed: number;
+  skipped: number;
 }
 
 export interface StatusReporter {

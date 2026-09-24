@@ -19,12 +19,18 @@ export class NoTestResultsError extends MoodleSubmitError {
   }
 }
 
-export function summarize(run: NormalizedTestRun): RunSummary {
+function summarize(run: NormalizedTestRun): RunSummary {
   return {
     total: run.results.length,
     passed: run.results.filter((r) => r.status === 'PASSED').length,
     failed: run.results.filter((r) => r.status === 'FAILED' || r.status === 'ERROR').length,
+    skipped: run.results.filter((r) => r.status === 'SKIPPED').length,
   };
+}
+
+export interface TestRunOutcome {
+  run: NormalizedTestRun;
+  summary: RunSummary;
 }
 
 export interface RunTestsOptions {
@@ -40,7 +46,7 @@ export async function runTests(
   registry: AdapterRegistry,
   folderPath: string,
   { logger, signal, onOutput, pickFromMultiple }: RunTestsOptions,
-): Promise<NormalizedTestRun> {
+): Promise<TestRunOutcome> {
   const preferredAdapterId = getPreferredAdapterId();
   const adapter = await registry.resolveAdapter(folderPath, { preferredAdapterId, pickFromMultiple });
 
@@ -75,10 +81,10 @@ export async function runTests(
 
     const summary = summarize(run);
     logger.log(
-      `Parsed ${run.results.length} result(s): ${summary.passed} passed, ${summary.failed} failed/errored, ` +
-        `${run.results.length - summary.passed - summary.failed} skipped.`,
+      `Parsed ${summary.total} result(s): ${summary.passed} passed, ${summary.failed} failed/errored, ` +
+        `${summary.skipped} skipped.`,
     );
-    return run;
+    return { run, summary };
   } finally {
     await result.cleanup();
   }

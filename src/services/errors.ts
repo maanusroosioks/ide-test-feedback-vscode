@@ -2,6 +2,12 @@ import { MoodleSubmitError } from '../core/errors';
 
 export class TimeoutError extends MoodleSubmitError {}
 
+export class MissingServiceUrlError extends MoodleSubmitError {
+  constructor() {
+    super('No serviceUrl configured. Run "Moodle Submit: Configure Assignment" first.');
+  }
+}
+
 export class NetworkError extends MoodleSubmitError {
   constructor(
     message: string,

@@ -1,6 +1,6 @@
 import type { GetAccessTokenOptions } from '../auth/authService';
 import type { TestRunRequest } from './httpTypes';
-import { HttpError, NetworkError, TimeoutError } from './errors';
+import { HttpError, MissingServiceUrlError, NetworkError, TimeoutError } from './errors';
 
 export interface MoodleApiClientOptions {
   getBaseUrl: () => string;
@@ -25,7 +25,7 @@ export class MoodleApiClient {
   private async postWithRetry(payload: TestRunRequest, isRetry: boolean): Promise<SubmitResult> {
     const baseUrl = this.options.getBaseUrl().replace(/\/+$/, '');
     if (!baseUrl) {
-      throw new NetworkError('No serviceUrl configured. Run "Moodle Submit: Configure Assignment" first.', undefined);
+      throw new MissingServiceUrlError();
     }
 
     const token = await this.options.getAccessToken({ forceRefresh: isRetry });
@@ -58,6 +58,10 @@ export class MoodleApiClient {
     }
 
     const bodyText = await response.text();
+    if (!response.ok) {
+      throw new HttpError(response.status, bodyText);
+    }
+
     let body: unknown = bodyText;
     if (bodyText) {
       try {
@@ -66,11 +70,6 @@ export class MoodleApiClient {
         // Not JSON: keep the raw text.
       }
     }
-
-    if (!response.ok) {
-      throw new HttpError(response.status, bodyText);
-    }
-
     return { status: response.status, body };
   }
 }

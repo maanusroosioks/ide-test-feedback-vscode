@@ -1,7 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { basename, isAbsolute, relative, sep } from 'node:path';
 import type { TestLocationResolver } from './location';
-import { analyzeDeclaration, unlocatedIntegrity, type TestIntegrity } from './integrity';
+import {
+  analyzeDeclaration,
+  unlocatedIntegrity,
+  type TestIntegrity,
+  type TestIntegrityEntry,
+} from './integrity';
 import {
   languageForFile,
   matchDeclaration,
@@ -60,13 +65,6 @@ export interface TestEvidencePayload {
   captureDisabled?: boolean;
 }
 
-/** Names its own test, so the warning path never indexes back into the run to find out whose it is. */
-export interface TestIntegrityEntry {
-  testSuite?: string;
-  testName: string;
-  integrity: TestIntegrity;
-}
-
 export interface TestEvidence {
   payload: TestEvidencePayload;
   /** Local only — feeds the pre-submit warning. Unreachable from `payload`, so it cannot be sent. */
@@ -80,21 +78,12 @@ export interface CaptureOptions {
   readFile?: (path: string) => Promise<string>;
 }
 
-export interface SuspiciousTest {
-  testSuite?: string;
-  testName: string;
-  reasons: string[];
-}
-
 interface SourceFile {
   relativePath: string;
   text: string;
   language: SourceLanguage;
   declarations: TestDeclaration[];
 }
-
-/** Below this share of unlocatable tests it's an unusual project layout, not a signal. */
-const UNLOCATED_SHARE = 0.3;
 
 function toLf(text: string): string {
   return text.replace(/\r\n/g, '\n');
@@ -220,36 +209,4 @@ export async function collectTestEvidence(
     payload: { sources: payloadSources, files, captureDisabled: options.captureSource ? undefined : true },
     integrity,
   };
-}
-
-/**
- * A framework-reported SKIPPED status is deliberately not a reason on its own: it is legitimate
- * and already visible in the results, and warning on it would train students to click through.
- */
-export function describeSuspiciousTests(entries: TestIntegrityEntry[]): SuspiciousTest[] {
-  const total = entries.length;
-  const unlocated = entries.filter((entry) => !entry.integrity.located).length;
-  const reportUnlocated = total > 0 && unlocated / total > UNLOCATED_SHARE;
-  const findings: SuspiciousTest[] = [];
-
-  for (const { testSuite, testName, integrity } of entries) {
-    const reasons: string[] = [];
-    if (integrity.empty) {
-      reasons.push('has an empty body');
-    } else if (integrity.located && integrity.assertionCount === 0) {
-      reasons.push('makes no assertions');
-    }
-    if (integrity.skipMarker) {
-      reasons.push(`is marked as skipped (${integrity.skipMarker})`);
-    }
-    if (!integrity.located && reportUnlocated) {
-      reasons.push("could not be found in the project's source");
-    }
-
-    if (reasons.length > 0) {
-      findings.push({ testSuite, testName, reasons });
-    }
-  }
-
-  return findings;
 }

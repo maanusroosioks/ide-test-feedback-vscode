@@ -17,6 +17,8 @@ export class InvalidPayloadError extends MoodleSubmitError {
   }
 }
 
+function truncate(value: string, max: number): string;
+function truncate(value: string | undefined, max: number): string | undefined;
 function truncate(value: string | undefined, max: number): string | undefined {
   if (value === undefined) return undefined;
   return value.length > max ? value.slice(0, max) : value;
@@ -26,6 +28,8 @@ function sanitizeForParamText(value: string | undefined): string | undefined {
   return value === undefined ? undefined : value.replace(/[<>]/g, '');
 }
 
+function textField(value: string, max: number): string;
+function textField(value: string | undefined, max: number): string | undefined;
 function textField(value: string | undefined, max: number): string | undefined {
   return truncate(sanitizeForParamText(value), max);
 }
@@ -57,14 +61,14 @@ function validateAssignmentKey(assignmentKey: string): void {
 function toSourceRequest(source: TestSource): TestSourceRequest | undefined {
   if (source.kind === 'NONE') return undefined;
 
-  const filePath = truncate(source.filePath, REQUEST_LIMITS.path) as string;
+  const filePath = truncate(source.filePath, REQUEST_LIMITS.path);
   if (source.kind === 'FILE') return { filePath };
   return { filePath, startLine: source.startLine, endLine: source.endLine };
 }
 
 function toSourceFileRequest(file: TestSourceFile): TestSourceFileRequest {
   return {
-    path: truncate(file.path, REQUEST_LIMITS.path) as string,
+    path: truncate(file.path, REQUEST_LIMITS.path),
     content: file.content,
     truncated: file.truncated,
   };
@@ -92,7 +96,7 @@ export function buildTestRunRequest(
     const source = evidence?.sources[index];
     return {
       testSuite: textField(testCase.testSuite, REQUEST_LIMITS.testSuite),
-      testName: textField(testCase.testName, REQUEST_LIMITS.testName) as string,
+      testName: textField(testCase.testName, REQUEST_LIMITS.testName),
       status: testCase.status,
       durationMs: durationField(testCase.durationMs),
       message: sanitizeForParamText(testCase.message),

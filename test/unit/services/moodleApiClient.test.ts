@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MoodleApiClient } from '../../../src/services/moodleApiClient';
-import { HttpError, NetworkError, TimeoutError } from '../../../src/services/errors';
+import { HttpError, MissingServiceUrlError, NetworkError, TimeoutError } from '../../../src/services/errors';
 import type { TestRunRequest } from '../../../src/services/httpTypes';
 
 const samplePayload: TestRunRequest = {
@@ -85,11 +85,11 @@ describe('MoodleApiClient', () => {
     await expect(client().submitResults(samplePayload)).rejects.toBeInstanceOf(TimeoutError);
   });
 
-  it('throws NetworkError immediately when no serviceUrl is configured', async () => {
+  it('throws MissingServiceUrlError immediately when no serviceUrl is configured', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(client({ baseUrl: '' }).submitResults(samplePayload)).rejects.toBeInstanceOf(NetworkError);
+    await expect(client({ baseUrl: '' }).submitResults(samplePayload)).rejects.toBeInstanceOf(MissingServiceUrlError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

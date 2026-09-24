@@ -129,7 +129,9 @@ Join a result to its file with `source.filePath` == `testFiles[].path`, then sli
 
 The extension keeps to the gateway's validation limits before sending: an `assignmentKey`
 of at most 100 characters from `[A-Za-z0-9_-]`, at most 5000 results and 200 test files,
-and the `@Size` limits on each text field.
+and the `@Size` limits on each text field. Past 200 files, the files are kept in path order
+and the results whose file was left out are sent with no `source`, so every `source.filePath`
+always has a matching `testFiles` entry.
 
 ## Settings
 

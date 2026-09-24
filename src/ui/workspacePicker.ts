@@ -20,18 +20,24 @@ export async function resolveWorkspaceFolder(): Promise<vscode.WorkspaceFolder> 
   if (activeFolder) {
     return activeFolder;
   }
-  if (folders.length === 1) {
-    return folders[0];
-  }
-
-  const pick = await vscode.window.showQuickPick(
-    folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
-    { placeHolder: 'Which folder holds the tests to run?' },
-  );
-  if (!pick) {
+  const picked = await pickWorkspaceFolder('Which folder holds the tests to run?');
+  if (!picked) {
     throw new NoWorkspaceFolderError();
   }
-  return pick.folder;
+  return picked;
+}
+
+/** Asks only when there is more than one folder; `undefined` if there are none or the user backs out. */
+export async function pickWorkspaceFolder(placeHolder: string): Promise<vscode.WorkspaceFolder | undefined> {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  if (folders.length <= 1) {
+    return folders[0];
+  }
+  const pick = await vscode.window.showQuickPick(
+    folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
+    { placeHolder },
+  );
+  return pick?.folder;
 }
 
 export async function pickAdapter(candidates: TestRunnerAdapter[]): Promise<TestRunnerAdapter> {

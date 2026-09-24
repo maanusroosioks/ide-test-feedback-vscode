@@ -12,7 +12,7 @@ import {
 import { assignmentKeyProblem } from '../services/httpTypes';
 import { WORKSPACE_CONFIG_FILE_NAME } from '../core/submissionMetadata';
 import { pathExists } from '../util/shell';
-import { refreshConfiguredContext } from '../ui/onboarding';
+import { pickWorkspaceFolder } from '../ui/workspacePicker';
 
 function validateUrl(value: string): string | undefined {
   const trimmed = value.trim();
@@ -53,23 +53,10 @@ async function reportReachability(baseUrl: string): Promise<void> {
   }
 }
 
-async function pickWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefined> {
-  const folders = vscode.workspace.workspaceFolders ?? [];
-  if (folders.length === 0) {
-    return undefined;
-  }
-  if (folders.length === 1) {
-    return folders[0];
-  }
-  const pick = await vscode.window.showQuickPick(
-    folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
-    { placeHolder: `Which project should get the ${WORKSPACE_CONFIG_FILE_NAME} file?` },
-  );
-  return pick?.folder;
-}
-
 async function offerAssignmentFile(): Promise<void> {
-  const folder = await pickWorkspaceFolder();
+  const folder = await pickWorkspaceFolder(
+    `Which project should get the ${WORKSPACE_CONFIG_FILE_NAME} file?`,
+  );
   if (!folder) {
     return;
   }
@@ -117,7 +104,6 @@ export function registerConfigureAssignmentCommand(
       }
       const trimmedUrl = serviceUrl.trim();
       await setServiceUrl(trimmedUrl);
-      refreshConfiguredContext();
       await reportReachability(trimmedUrl);
 
       const assignmentKey = await vscode.window.showInputBox({

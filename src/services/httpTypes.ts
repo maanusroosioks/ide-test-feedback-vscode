@@ -1,7 +1,5 @@
 import type { TestStatus } from '../core/types';
 
-export type TestResultStatus = TestStatus;
-
 export type Ide = 'VSCODE';
 
 /** Mirrors the gateway's bean validation on `TestRunRequest` and its nested DTOs. */
@@ -60,7 +58,7 @@ export interface TestSourceFileRequest {
 export interface TestResultRequest {
   testSuite?: string;
   testName: string;
-  status: TestResultStatus;
+  status: TestStatus;
   durationMs?: number;
   message?: string;
   source?: TestSourceRequest;

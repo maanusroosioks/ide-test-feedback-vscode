@@ -4,13 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { TestLocationResolver } from '../../../src/capture/location';
 import {
   collectTestEvidence,
-  describeSuspiciousTests,
   type CaptureOptions,
   type DeclaredSource,
   type FileSource,
   type TestEvidence,
   type TestSourceKind,
 } from '../../../src/capture/evidence';
+import { describeSuspiciousTests } from '../../../src/capture/integrity';
 import { sliceLines } from '../../../src/source';
 import type { NormalizedTestCase, NormalizedTestRun, RunLanguage } from '../../../src/core/types';
 

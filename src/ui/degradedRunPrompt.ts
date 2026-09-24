@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { SuspiciousTest } from '../capture/evidence';
+import type { SuspiciousTest } from '../capture/integrity';
 
 const MAX_LISTED = 10;
 
