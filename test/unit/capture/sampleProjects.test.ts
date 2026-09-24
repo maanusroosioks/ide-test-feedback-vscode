@@ -15,7 +15,7 @@ import {
 } from '../../../src/capture/evidence';
 import { describeSuspiciousTests } from '../../../src/capture/integrity';
 import { sliceLines } from '../../../src/source';
-import type { NormalizedTestCase, NormalizedTestRun, RunLanguage } from '../../../src/core/types';
+import type { NormalizedTestCase, NormalizedTestRun, Platform } from '../../../src/core/types';
 
 const EXAMPLES = resolve('c:/Moodle/examples');
 
@@ -31,7 +31,7 @@ function sourcesOf(evidence: TestEvidence): AnySource[] {
 }
 
 async function evidenceFor(folder: string, run: NormalizedTestRun): Promise<TestEvidence> {
-  return collectTestEvidence(run, new TestLocationResolver(folder, run.language), {
+  return collectTestEvidence(run, new TestLocationResolver(folder, run.platform), {
     folderPath: folder,
     captureSource: true,
     maxTotalChars: 200000,
@@ -40,10 +40,10 @@ async function evidenceFor(folder: string, run: NormalizedTestRun): Promise<Test
 
 function run(
   adapterId: string,
-  language: RunLanguage,
+  platform: Platform,
   results: NormalizedTestCase[],
 ): NormalizedTestRun {
-  return { adapterId, language, startedAt: 1000, finishedAt: 2000, results };
+  return { adapterId, platform, startedAt: 1000, finishedAt: 2000, results };
 }
 
 /** Reads a test back the way the grader has to: slice it out of its file. */
@@ -107,7 +107,7 @@ describe.skipIf(!existsSync(pythonSample))('python-sample', () => {
 });
 
 describe.skipIf(!existsSync(mavenSample) || !existsSync(gradleSample))('java samples', () => {
-  const testRun = run('maven-junit', 'java', [
+  const testRun = run('maven-junit', 'jvm', [
     { testSuite: 'com.example.calculator.CalculatorTest', testName: 'addReturnsSum()', status: 'PASSED' },
     {
       testSuite: 'com.example.calculator.CalculatorTest',
@@ -140,7 +140,7 @@ describe.skipIf(!existsSync(mavenSample) || !existsSync(gradleSample))('java sam
 
 describe.skipIf(!existsSync(dotnetSample))('dotnet-sample', () => {
   const suite = 'CalculatorSample.Tests.CalculatorTests';
-  const testRun = run('dotnet-test', 'csharp', [
+  const testRun = run('dotnet-test', 'dotnet', [
     { testSuite: suite, testName: `${suite}.Add_ReturnsSum`, status: 'PASSED' },
     {
       testSuite: suite,

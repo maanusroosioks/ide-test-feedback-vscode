@@ -8,7 +8,7 @@ const DETECT_FILES = ['pytest.ini', 'pyproject.toml', 'setup.cfg', 'conftest.py'
 export const pytestAdapter = defineAdapter({
   id: 'pytest',
   displayName: 'pytest',
-  language: 'python',
+  platform: 'python',
 
   detect: (folderPath) => anyExists(folderPath, DETECT_FILES),
 

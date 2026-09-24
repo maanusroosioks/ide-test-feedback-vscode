@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  languageForFile,
-  maskCommentsAndStrings,
-  sliceLines,
-  type TestDeclaration,
-} from '../../../src/source';
+import { languageForFile, maskCommentsAndStrings } from '../../../src/languages';
+import { sliceLines, type TestDeclaration } from '../../../src/source';
 import { declarationNamed as find, fixture, scan } from '../helpers/sourceFixtures';
 
 function names(declarations: TestDeclaration[]): string[] {
@@ -16,14 +12,14 @@ function snippet(text: string, declaration: TestDeclaration): string {
 }
 
 describe('languageForFile', () => {
-  it('prefers the file extension over the adapter language', () => {
-    // The java adapter also covers .kt, so the extension has to win.
-    expect(languageForFile('/p/src/test/kotlin/FooTest.kt', 'java')).toBe('kotlin');
-    expect(languageForFile('/p/src/test/java/FooTest.java', 'java')).toBe('java');
+  it('prefers the file extension over the platform default', () => {
+    // The JVM platform hosts both Java and Kotlin, so the extension has to win.
+    expect(languageForFile('/p/src/test/kotlin/FooTest.kt', 'jvm')).toBe('kotlin');
+    expect(languageForFile('/p/src/test/java/FooTest.java', 'jvm')).toBe('java');
   });
 
-  it('falls back to the adapter language when the extension is unknown', () => {
-    expect(languageForFile('/p/FooTest.groovy', 'java')).toBe('java');
+  it("falls back to the platform's default language when the extension is unknown", () => {
+    expect(languageForFile('/p/FooTest.groovy', 'jvm')).toBe('java');
   });
 });
 

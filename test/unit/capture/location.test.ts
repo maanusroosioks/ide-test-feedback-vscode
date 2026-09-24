@@ -3,19 +3,19 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TestLocationResolver, parseStackFrames } from '../../../src/capture/location';
-import type { RunLanguage } from '../../../src/core/types';
+import type { Platform } from '../../../src/core/types';
 
 const ROOT = resolve('/work/proj');
 
 /** Builds a resolver whose filesystem is exactly the given relative paths. */
 function resolverFor(
-  language: RunLanguage,
+  platform: Platform,
   files: string[],
   dirs: string[] = [],
   root = ROOT,
 ): TestLocationResolver {
   const present = new Set(files.map((file) => resolve(root, file)));
-  return new TestLocationResolver(root, language, {
+  return new TestLocationResolver(root, platform, {
     exists: async (path) => present.has(path),
     listDirs: async () => dirs,
   });
@@ -29,7 +29,7 @@ describe('parseStackFrames — JVM', () => {
       '\tat app//com.pkg.FooTest.addsUp(FooTest.java:42)',
     ].join('\n');
 
-    expect(parseStackFrames(trace, 'java')).toEqual([
+    expect(parseStackFrames(trace, 'jvm')).toEqual([
       { className: 'org.junit.Assert', file: 'Assert.java', line: 88 },
       { className: 'com.pkg.FooTest', file: 'FooTest.java', line: 42 },
     ]);
@@ -37,7 +37,7 @@ describe('parseStackFrames — JVM', () => {
 
   it('skips frames with no source file', () => {
     const trace = '\tat java.base/java.lang.reflect.Method.invoke(Method.java:568)\n\tat Foo.bar(Unknown Source)';
-    expect(parseStackFrames(trace, 'java')).toHaveLength(1);
+    expect(parseStackFrames(trace, 'jvm')).toHaveLength(1);
   });
 });
 
@@ -68,13 +68,13 @@ describe('parseStackFrames — .NET', () => {
   it('reads the file and line after "in"', () => {
     const file = resolve(ROOT, 'FooTests.cs');
     const trace = `   at Ns.FooTests.Bar() in ${file}:line 42`;
-    expect(parseStackFrames(trace, 'csharp')).toEqual([{ file, line: 42 }]);
+    expect(parseStackFrames(trace, 'dotnet')).toEqual([{ file, line: 42 }]);
   });
 });
 
 describe('resolveTestLocation', () => {
   it('maps a JVM frame to a maven test source root via the class name', async () => {
-    const resolver = resolverFor('java', ['src/test/java/com/pkg/FooTest.java']);
+    const resolver = resolverFor('jvm', ['src/test/java/com/pkg/FooTest.java']);
     const trace = '\tat com.pkg.FooTest.addsUp(FooTest.java:42)';
 
     await expect(resolver.resolveTestLocation('com.pkg.FooTest', trace)).resolves.toEqual({
@@ -84,7 +84,7 @@ describe('resolveTestLocation', () => {
   });
 
   it('prefers the frame belonging to the test suite over library frames', async () => {
-    const resolver = resolverFor('java', [
+    const resolver = resolverFor('jvm', [
       'src/test/java/com/pkg/FooTest.java',
       'src/main/java/com/pkg/Helper.java',
     ]);
@@ -100,7 +100,7 @@ describe('resolveTestLocation', () => {
   });
 
   it('attributes a nested-class frame to its outer suite file', async () => {
-    const resolver = resolverFor('java', ['src/test/java/com/pkg/FooTest.java']);
+    const resolver = resolverFor('jvm', ['src/test/java/com/pkg/FooTest.java']);
     const trace = '\tat com.pkg.FooTest$Inner.addsUp(FooTest.java:19)';
 
     await expect(resolver.resolveTestLocation('com.pkg.FooTest', trace)).resolves.toEqual({
@@ -110,7 +110,7 @@ describe('resolveTestLocation', () => {
   });
 
   it('falls back to the first resolvable frame when none match the suite', async () => {
-    const resolver = resolverFor('java', ['src/main/java/com/pkg/Helper.java']);
+    const resolver = resolverFor('jvm', ['src/main/java/com/pkg/Helper.java']);
     const trace = [
       '\tat org.junit.Assert.fail(Assert.java:88)',
       '\tat com.pkg.Helper.check(Helper.java:7)',
@@ -123,7 +123,7 @@ describe('resolveTestLocation', () => {
   });
 
   it('finds sources in a multi-module layout', async () => {
-    const resolver = resolverFor('java', ['core/src/test/java/com/pkg/FooTest.java'], ['core', 'web']);
+    const resolver = resolverFor('jvm', ['core/src/test/java/com/pkg/FooTest.java'], ['core', 'web']);
     const trace = '\tat com.pkg.FooTest.addsUp(FooTest.java:42)';
 
     await expect(resolver.resolveTestLocation('com.pkg.FooTest', trace)).resolves.toEqual({
@@ -143,7 +143,7 @@ describe('resolveTestLocation', () => {
   });
 
   it('gives a passing test the suite file with no line', async () => {
-    const resolver = resolverFor('java', ['src/test/java/com/pkg/FooTest.java']);
+    const resolver = resolverFor('jvm', ['src/test/java/com/pkg/FooTest.java']);
 
     await expect(resolver.resolveTestLocation('com.pkg.FooTest', undefined)).resolves.toEqual({
       file: resolve(ROOT, 'src/test/java/com/pkg/FooTest.java'),
@@ -159,7 +159,7 @@ describe('resolveTestLocation', () => {
   });
 
   it('returns nothing when the suite has no matching file on disk', async () => {
-    const resolver = resolverFor('java', []);
+    const resolver = resolverFor('jvm', []);
 
     await expect(resolver.resolveTestLocation('com.pkg.FooTest', undefined)).resolves.toBeUndefined();
   });
@@ -167,7 +167,7 @@ describe('resolveTestLocation', () => {
   it('reuses one filesystem probe across repeated lookups', async () => {
     let probes = 0;
     const present = new Set([resolve(ROOT, 'src/test/java/com/pkg/FooTest.java')]);
-    const resolver = new TestLocationResolver(ROOT, 'java', {
+    const resolver = new TestLocationResolver(ROOT, 'jvm', {
       exists: async (path) => {
         probes += 1;
         return present.has(path);
@@ -210,7 +210,7 @@ describe('TestLocationResolver — real filesystem', () => {
       'build/src/test/java/com/pkg/FooTest.java',
       'core/src/test/java/com/pkg/FooTest.java',
     ]);
-    const resolver = new TestLocationResolver(root, 'java');
+    const resolver = new TestLocationResolver(root, 'jvm');
 
     expect(await resolver.resolveSuiteFile('com.pkg.FooTest')).toBe(
       resolve(root, 'core/src/test/java/com/pkg/FooTest.java'),
@@ -218,7 +218,7 @@ describe('TestLocationResolver — real filesystem', () => {
   });
 
   it('finds nothing in a folder that does not exist', async () => {
-    const resolver = new TestLocationResolver(join(tmpdir(), 'location-missing', 'nowhere'), 'java');
+    const resolver = new TestLocationResolver(join(tmpdir(), 'location-missing', 'nowhere'), 'jvm');
 
     expect(await resolver.resolveSuiteFile('com.pkg.FooTest')).toBeUndefined();
   });

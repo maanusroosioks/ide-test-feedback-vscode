@@ -9,7 +9,7 @@ const PROJECT_EXTENSIONS = ['.csproj', '.sln'];
 export const dotnetTestAdapter = defineAdapter({
   id: 'dotnet-test',
   displayName: '.NET (dotnet test)',
-  language: 'csharp',
+  platform: 'dotnet',
 
   async detect(folderPath) {
     try {

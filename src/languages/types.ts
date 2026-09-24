@@ -1,12 +1,14 @@
-import type { LexicalRules } from '../source/mask';
-import type { SourceLanguage, TestDeclaration } from '../source/language';
+import type { LexicalRules, TestDeclaration } from '../source';
+
+export type SourceLanguage = 'python' | 'java' | 'kotlin' | 'csharp';
 
 /** What the extension knows about one language's source text. */
 export interface SourceLanguageProfile {
   /** Lower-case, dot included. */
   extensions: string[];
   lexer: LexicalRules;
-  scanDeclarations(text: string): TestDeclaration[];
+  /** `masked` is `text` put through `lexer`. */
+  scanDeclarations(text: string, masked: string): TestDeclaration[];
   /**
    * One global alternation, not a list: a global regex consumes what it matches, so chained styles
    * like AssertJ's `assertThat(x).isEqualTo(y)` count once.
@@ -15,6 +17,8 @@ export interface SourceLanguageProfile {
   /** Tested against each marker on the test and its enclosing type. */
   skipMarkers: RegExp[];
   skipInBody: RegExp[];
+  /** Global. Tokens that do nothing in a test body, on top of the ones every language shares. */
+  noopPatterns: RegExp[];
 }
 
 export interface StackFrame {
@@ -30,7 +34,7 @@ export interface StackFrameRule {
 }
 
 /** What the extension knows about the platform an adapter runs on, which may host several source languages. */
-export interface RunLanguageProfile {
+export interface PlatformProfile {
   /** For a file no source language claims, e.g. `.scala` on the JVM. */
   defaultSourceLanguage: SourceLanguage;
   /** Where a test suite's file may be found; wider than the source languages scanned. */

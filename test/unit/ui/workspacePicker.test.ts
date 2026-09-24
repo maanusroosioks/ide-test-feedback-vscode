@@ -92,7 +92,7 @@ describe('pickAdapter', () => {
   const adapter = (id: string): TestRunnerAdapter => ({
     id,
     displayName: `Display ${id}`,
-    language: 'java',
+    platform: 'jvm',
     detect: async () => true,
     run: async () => {
       throw new Error('not used');

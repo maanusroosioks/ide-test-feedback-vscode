@@ -1,8 +1,10 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { RUN_LANGUAGES, SOURCE_LANGUAGES } from '../../../src/languages';
+import { PLATFORMS, SOURCE_LANGUAGES } from '../../../src/languages';
 
 const sourceProfiles = Object.entries(SOURCE_LANGUAGES);
-const runProfiles = Object.entries(RUN_LANGUAGES);
+const platformProfiles = Object.entries(PLATFORMS);
 
 describe('language profiles', () => {
   it('claims each file extension for at most one source language', () => {
@@ -13,7 +15,7 @@ describe('language profiles', () => {
   it('writes extensions lower-case with the dot, as languageForFile looks them up', () => {
     const all = [
       ...sourceProfiles.flatMap(([, profile]) => profile.extensions),
-      ...runProfiles.flatMap(([, profile]) => profile.sourceExtensions),
+      ...platformProfiles.flatMap(([, profile]) => profile.sourceExtensions),
     ];
     for (const extension of all) {
       expect(extension).toMatch(/^\.[a-z0-9]+$/);
@@ -21,17 +23,17 @@ describe('language profiles', () => {
   });
 
   // Otherwise the location resolver could never find that language's files to scan.
-  it('hosts every source language on a run language that looks for its files', () => {
+  it('hosts every source language on a platform that looks for its files', () => {
     for (const [language, profile] of sourceProfiles) {
-      const hosts = runProfiles.filter(([, run]) =>
+      const hosts = platformProfiles.filter(([, run]) =>
         profile.extensions.every((extension) => run.sourceExtensions.includes(extension)),
       );
-      expect(hosts, `no run language covers ${language}`).not.toHaveLength(0);
+      expect(hosts, `no platform covers ${language}`).not.toHaveLength(0);
     }
   });
 
   it("covers the default source language's own files", () => {
-    for (const [, run] of runProfiles) {
+    for (const [, run] of platformProfiles) {
       for (const extension of SOURCE_LANGUAGES[run.defaultSourceLanguage].extensions) {
         expect(run.sourceExtensions).toContain(extension);
       }
@@ -39,9 +41,20 @@ describe('language profiles', () => {
   });
 
   it('marks every regex that is run in a loop as global', () => {
-    for (const [, run] of runProfiles) {
+    for (const [, run] of platformProfiles) {
       for (const rule of run.stackFrames) expect(rule.pattern.global).toBe(true);
     }
-    for (const [, profile] of sourceProfiles) expect(profile.assertions.global).toBe(true);
+    for (const [, profile] of sourceProfiles) {
+      expect(profile.assertions.global).toBe(true);
+      for (const pattern of profile.noopPatterns) expect(pattern.global).toBe(true);
+    }
+  });
+
+  it('keeps src/source free of language knowledge', () => {
+    const sourceDir = join(__dirname, '../../../src/source');
+    for (const file of readdirSync(sourceDir)) {
+      const text = readFileSync(join(sourceDir, file), 'utf8');
+      expect(text, `${file} imports ../languages`).not.toMatch(/from '\.\.\/languages/);
+    }
   });
 });

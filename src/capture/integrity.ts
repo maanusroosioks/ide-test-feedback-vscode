@@ -2,8 +2,8 @@
 // Computed over files the student owns, so they were never trustworthy as evidence; the grader
 // gets the test source instead.
 
-import { SOURCE_LANGUAGES, type SourceLanguageProfile } from '../languages';
-import { maskCommentsAndStrings, type SourceLanguage, type TestDeclaration } from '../source';
+import { SOURCE_LANGUAGES, type SourceLanguage, type SourceLanguageProfile } from '../languages';
+import { maskWith, type TestDeclaration } from '../source';
 
 export interface TestIntegrity {
   /** Whether a declaration for this result was found in the project's source. */
@@ -16,24 +16,17 @@ export interface TestIntegrity {
 
 const MAX_SKIP_MARKER = 100;
 
-const NOOP_PATTERNS: RegExp[] = [
-  /\bTask\s*\.\s*(?:CompletedTask|FromResult\s*\(\s*\))/g,
-  /\breturn\b/g,
-  /\bawait\b/g,
-  /\bpass\b/g,
-  /\bnull\b/g,
-  /\bUnit\b/g,
-  /\.\.\./g,
-];
+/** Every language's; each profile adds its own. */
+const SHARED_NOOP_PATTERNS: RegExp[] = [/\breturn\b/g, /\bawait\b/g, /\.\.\./g];
 
 /** `String.prototype.match` resets lastIndex, so a global regex shared between profiles is safe here. */
 function countMatches(text: string, pattern: RegExp): number {
   return text.match(pattern)?.length ?? 0;
 }
 
-function isEmptyBody(maskedBody: string): boolean {
+function isEmptyBody(maskedBody: string, profile: SourceLanguageProfile): boolean {
   let remaining = maskedBody;
-  for (const pattern of NOOP_PATTERNS) {
+  for (const pattern of [...profile.noopPatterns, ...SHARED_NOOP_PATTERNS]) {
     remaining = remaining.replace(pattern, ' ');
   }
   // Quotes survive masking, so a docstring-only body reduces to its delimiters.
@@ -62,13 +55,13 @@ export function analyzeDeclaration(
   language: SourceLanguage,
 ): TestIntegrity {
   const profile = SOURCE_LANGUAGES[language];
-  const maskedBody = maskCommentsAndStrings(declaration.bodyText, language);
+  const maskedBody = maskWith(declaration.bodyText, profile.lexer);
   const skipMarker = findSkipMarker(declaration, maskedBody, profile);
 
   return {
     located: true,
     assertionCount: countMatches(maskedBody, profile.assertions),
-    empty: isEmptyBody(maskedBody),
+    empty: isEmptyBody(maskedBody, profile),
     skipMarker,
   };
 }

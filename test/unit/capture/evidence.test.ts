@@ -12,7 +12,7 @@ import {
 } from '../../../src/capture/evidence';
 import { describeSuspiciousTests } from '../../../src/capture/integrity';
 import { sliceLines } from '../../../src/source';
-import type { NormalizedTestCase, NormalizedTestRun, RunLanguage } from '../../../src/core/types';
+import type { NormalizedTestCase, NormalizedTestRun, Platform } from '../../../src/core/types';
 
 const FOLDER = resolve('/project');
 const PYTHON_SOURCE = readFileSync(
@@ -34,8 +34,8 @@ function sourcesOf(evidence: TestEvidence): AnySource[] {
   return evidence.payload.sources as AnySource[];
 }
 
-function run(results: NormalizedTestCase[], language: RunLanguage = 'python'): NormalizedTestRun {
-  return { adapterId: 'pytest', language, startedAt: 1000, finishedAt: 2000, results };
+function run(results: NormalizedTestCase[], platform: Platform = 'python'): NormalizedTestRun {
+  return { adapterId: 'pytest', platform, startedAt: 1000, finishedAt: 2000, results };
 }
 
 async function collect(
@@ -48,7 +48,7 @@ async function collect(
   );
   const reads: string[] = [];
 
-  const resolver = new TestLocationResolver(FOLDER, testRun.language, {
+  const resolver = new TestLocationResolver(FOLDER, testRun.platform, {
     exists: async (path) => absolute.has(resolve(path)),
     listDirs: async () => [],
   });

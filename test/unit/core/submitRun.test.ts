@@ -10,7 +10,7 @@ import type { TestRunRequest } from '../../../src/services/httpTypes';
 
 const run: NormalizedTestRun = {
   adapterId: 'pytest',
-  language: 'python',
+  platform: 'python',
   startedAt: 1000,
   finishedAt: 2000,
   results: [{ testSuite: 'test_calculator', testName: 'test_adds', status: 'PASSED', durationMs: 5 }],

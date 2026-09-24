@@ -1,4 +1,4 @@
-import type { TestDeclaration } from './language';
+import type { TestDeclaration } from './types';
 import { matchBackward } from './text';
 
 function trimTrailingGroup(value: string, open: string, close: string): string | undefined {

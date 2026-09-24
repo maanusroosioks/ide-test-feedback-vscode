@@ -94,7 +94,7 @@ function testsRan(results: NormalizedTestCase[], onRun?: (options: RunTestsOptio
     const skipped = results.filter((r) => r.status === 'SKIPPED').length;
     const passed = results.filter((r) => r.status === 'PASSED').length;
     return {
-      run: { adapterId: 'pytest', language: 'python', startedAt: 1, finishedAt: 2, results },
+      run: { adapterId: 'pytest', platform: 'python', startedAt: 1, finishedAt: 2, results },
       summary: { total: results.length, passed, failed, skipped },
     };
   });

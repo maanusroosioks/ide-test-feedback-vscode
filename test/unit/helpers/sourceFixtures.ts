@@ -1,11 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from 'vitest';
-import {
-  scanTestDeclarations,
-  type SourceLanguage,
-  type TestDeclaration,
-} from '../../../src/source';
+import { scanTestDeclarations, type SourceLanguage } from '../../../src/languages';
+import type { TestDeclaration } from '../../../src/source';
 
 const FIXTURES_DIR = join(__dirname, '../fixtures/source');
 

@@ -1,4 +1,4 @@
-import type { NormalizedTestCase, RunLanguage } from '../core/types';
+import type { NormalizedTestCase, Platform } from '../core/types';
 import { describeError } from '../core/errors';
 import { runCommand } from '../util/shell';
 import type { AdapterRunResult, RunOptions, TestRunnerAdapter } from './types';
@@ -13,7 +13,7 @@ export interface PreparedRun {
 export interface AdapterSpec {
   id: string;
   displayName: string;
-  language: RunLanguage;
+  platform: Platform;
   detect(folderPath: string): Promise<boolean>;
   /** Runs before the command, so it is also where stale reports get cleared. */
   prepare(folderPath: string, opts: RunOptions): Promise<PreparedRun>;
@@ -22,12 +22,12 @@ export interface AdapterSpec {
 const NO_CLEANUP = async (): Promise<void> => {};
 
 export function defineAdapter(spec: AdapterSpec): TestRunnerAdapter {
-  const { id, displayName, language, detect } = spec;
+  const { id, displayName, platform, detect } = spec;
 
   return {
     id,
     displayName,
-    language,
+    platform,
     detect,
 
     async run(folderPath, opts): Promise<AdapterRunResult> {
@@ -53,7 +53,7 @@ export function defineAdapter(spec: AdapterSpec): TestRunnerAdapter {
         }
 
         return {
-          run: { adapterId: id, language, startedAt, finishedAt, results },
+          run: { adapterId: id, platform, startedAt, finishedAt, results },
           stdout,
           stderr,
           exitCode,

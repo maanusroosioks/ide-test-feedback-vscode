@@ -14,7 +14,7 @@ const metadata: SubmissionMetadata = {
 function sampleRun(overrides: Partial<NormalizedTestRun> = {}): NormalizedTestRun {
   return {
     adapterId: 'pytest',
-    language: 'python',
+    platform: 'python',
     startedAt: 1000,
     finishedAt: 2000,
     results: [

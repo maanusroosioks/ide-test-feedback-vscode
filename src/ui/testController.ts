@@ -354,7 +354,7 @@ export function registerTestController(
 
       // One resolver for the whole run: its probe cache is what makes the second pass over the
       // results, for source capture, cost no extra filesystem work.
-      const resolver = new TestLocationResolver(folder.uri.fsPath, run.language);
+      const resolver = new TestLocationResolver(folder.uri.fsPath, run.platform);
       await applyResults(testRun, folder, run, resolver);
       deps.status.result(summary);
 

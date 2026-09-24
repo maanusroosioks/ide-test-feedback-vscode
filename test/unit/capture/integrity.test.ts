@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeDeclaration, unlocatedIntegrity } from '../../../src/capture/integrity';
-import type { SourceLanguage, TestDeclaration } from '../../../src/source';
+import type { SourceLanguage } from '../../../src/languages';
+import type { TestDeclaration } from '../../../src/source';
 import { declarationNamed, declarations } from '../helpers/sourceFixtures';
 
 const { python, java, kotlin, csharp } = declarations;
@@ -24,6 +25,18 @@ describe('analyzeDeclaration — python', () => {
       empty: true,
       assertionCount: 0,
     });
+  });
+
+  it('flags a body that only returns None as empty', () => {
+    const declaration: TestDeclaration = {
+      name: 'test_x',
+      startLine: 1,
+      endLine: 2,
+      markers: [],
+      containerMarkers: [],
+      bodyText: '    return None',
+    };
+    expect(analyzeDeclaration(declaration, 'python').empty).toBe(true);
   });
 
   it('flags a docstring-only body as empty', () => {

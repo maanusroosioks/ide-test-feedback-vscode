@@ -1,5 +1,4 @@
-import type { TestDeclaration } from './language';
-import { maskWith, type LexicalRules } from './mask';
+import type { TestDeclaration } from './types';
 import { scanTopLevel, sliceLines } from './text';
 
 const PY_DECORATOR = /^[ \t]*@/;
@@ -37,8 +36,8 @@ function signatureColon(maskedLine: string): number {
   return scanTopLevel(maskedLine, 0, ':');
 }
 
-export function scanPython(text: string, lexer: LexicalRules): TestDeclaration[] {
-  const masked = maskWith(text, lexer);
+/** `masked` is `text` with comments and string contents blanked, offset for offset. */
+export function scanPython(text: string, masked: string): TestDeclaration[] {
   const lines = text.split('\n');
   const maskedLines = masked.split('\n');
   const declarations: TestDeclaration[] = [];

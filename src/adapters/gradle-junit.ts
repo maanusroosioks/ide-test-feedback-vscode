@@ -21,7 +21,7 @@ async function resolveGradleCommand(folderPath: string): Promise<string> {
 export const gradleJunitAdapter = defineAdapter({
   id: 'gradle-junit',
   displayName: 'Gradle (JUnit)',
-  language: 'java',
+  platform: 'jvm',
 
   detect: (folderPath) => anyExists(folderPath, BUILD_FILES),
 

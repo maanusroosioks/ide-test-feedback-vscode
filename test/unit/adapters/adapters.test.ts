@@ -83,7 +83,7 @@ describe('mavenJunitAdapter', () => {
 
     const result = await mavenJunitAdapter.run(folder, {});
 
-    expect(result.run).toMatchObject({ adapterId: 'maven-junit', language: 'java' });
+    expect(result.run).toMatchObject({ adapterId: 'maven-junit', platform: 'jvm' });
     expect(result.run.results).toHaveLength(4);
     expect(result.run.results.map((r) => r.status)).toEqual(['PASSED', 'FAILED', 'PASSED', 'FAILED']);
     expect(result.reportError).toBeUndefined();
@@ -169,7 +169,7 @@ describe('gradleJunitAdapter', () => {
 
     const result = await gradleJunitAdapter.run(folder, {});
 
-    expect(result.run).toMatchObject({ adapterId: 'gradle-junit', language: 'java' });
+    expect(result.run).toMatchObject({ adapterId: 'gradle-junit', platform: 'jvm' });
     expect(result.run.results).toHaveLength(4);
   });
 });
@@ -220,7 +220,7 @@ describe('pytestAdapter', () => {
 
     const result = await pytestAdapter.run(folder, {});
 
-    expect(result.run).toMatchObject({ adapterId: 'pytest', language: 'python' });
+    expect(result.run).toMatchObject({ adapterId: 'pytest', platform: 'python' });
     expect(result.run.results).toHaveLength(4);
     expect(await pathExists(reportPath)).toBe(true);
 
@@ -296,7 +296,7 @@ describe('dotnetTestAdapter', () => {
 
     const result = await dotnetTestAdapter.run(folder, {});
 
-    expect(result.run).toMatchObject({ adapterId: 'dotnet-test', language: 'csharp' });
+    expect(result.run).toMatchObject({ adapterId: 'dotnet-test', platform: 'dotnet' });
     expect(result.run.results.map((r) => r.status)).toEqual(['PASSED', 'FAILED', 'SKIPPED']);
 
     await result.cleanup();

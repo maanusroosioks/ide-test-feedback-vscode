@@ -1,13 +1,49 @@
-import type { RunLanguageProfile } from './types';
+import { ANNOTATIONS, scanCLike, type CLikeDialect } from '../source';
+import type { PlatformProfile, SourceLanguageProfile } from './types';
 
-// Shared by every JVM source language: they run the same test frameworks.
+// ------------------------------------------------------------- source languages ----
 
-export const JVM_TEST_ANNOTATION =
+const TEST_ANNOTATION =
   /@[ \t]*(?:[A-Za-z_]\w*[ \t]*\.[ \t]*)*(ParameterizedTest|RepeatedTest|TestFactory|TestTemplate|Test)\b/g;
 
-export const JVM_ASSERTIONS = /\bassert[A-Z_]\w*\s*\(|\bassert\s*\(|\bfail\s*\(|\bverify\s*\(|\bshould[A-Z]\w*\b/g;
+interface JvmSourceOptions {
+  extensions: string[];
+  /** False where `"""…"""` is a raw string. */
+  tripleQuoteEscapes: boolean;
+  expressionBodyEnd: string;
+  noopPatterns: RegExp[];
+}
 
-export const JVM_SKIP_MARKERS = [/@\s*(?:[\w.]*\.)?(?:Disabled|Ignore)\b/];
+/** JVM languages differ in syntax, but run the same test frameworks and so share their markers. */
+function jvmSource({ extensions, tripleQuoteEscapes, expressionBodyEnd, noopPatterns }: JvmSourceOptions): SourceLanguageProfile {
+  const dialect: CLikeDialect = { markers: ANNOTATIONS, testMarker: TEST_ANNOTATION, expressionBodyEnd };
+  return {
+    extensions,
+    lexer: { lineComment: '//', blockComment: ['/*', '*/'], tripleQuoteEscapes },
+    scanDeclarations: (text, masked) => scanCLike(text, masked, dialect),
+    assertions: /\bassert[A-Z_]\w*\s*\(|\bassert\s*\(|\bfail\s*\(|\bverify\s*\(|\bshould[A-Z]\w*\b/g,
+    skipMarkers: [/@\s*(?:[\w.]*\.)?(?:Disabled|Ignore)\b/],
+    skipInBody: [],
+    noopPatterns,
+  };
+}
+
+export const javaSource = jvmSource({
+  extensions: ['.java'],
+  tripleQuoteEscapes: true,
+  expressionBodyEnd: ';',
+  noopPatterns: [/\bnull\b/g],
+});
+
+export const kotlinSource = jvmSource({
+  extensions: ['.kt', '.kts'],
+  tripleQuoteEscapes: false,
+  // Statements need no `;`, so an expression body ends at the line break.
+  expressionBodyEnd: ';\n',
+  noopPatterns: [/\bnull\b/g, /\bUnit\b/g],
+});
+
+// ---------------------------------------------------------------------- platform ----
 
 const SOURCE_EXTENSIONS = ['.java', '.kt', '.kts', '.scala', '.groovy'];
 
@@ -20,7 +56,7 @@ function className(qualified: string): string | undefined {
   return lastDot > 0 ? afterModule.slice(0, lastDot) : undefined;
 }
 
-export const jvmRun: RunLanguageProfile = {
+export const jvmPlatform: PlatformProfile = {
   defaultSourceLanguage: 'java',
   sourceExtensions: SOURCE_EXTENSIONS,
   sourceRoots: [

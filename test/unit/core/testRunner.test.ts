@@ -20,12 +20,12 @@ function fakeAdapter(options: FakeAdapterOptions = {}) {
   const adapter: TestRunnerAdapter = {
     id: options.id ?? 'fake',
     displayName: `Fake ${options.id ?? 'fake'}`,
-    language: 'python',
+    platform: 'python',
     detect: async () => options.detects ?? true,
     run: async (_folder, opts): Promise<AdapterRunResult> => {
       runOptions.push(opts);
       return {
-        run: { adapterId: 'fake', language: 'python', startedAt: 1, finishedAt: 2, results: options.results ?? [] },
+        run: { adapterId: 'fake', platform: 'python', startedAt: 1, finishedAt: 2, results: options.results ?? [] },
         stdout: 'collected 3 items',
         stderr: options.stderr ?? '',
         exitCode: options.exitCode ?? 0,

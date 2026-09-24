@@ -1,5 +1,3 @@
-export type SourceLanguage = 'python' | 'java' | 'kotlin' | 'csharp';
-
 export interface TestDeclaration {
   name: string;
   /** Dotted outermost-first. Absent for a module-level function. */

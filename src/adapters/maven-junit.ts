@@ -9,7 +9,7 @@ const REPORT_DIR = 'surefire-reports';
 export const mavenJunitAdapter = defineAdapter({
   id: 'maven-junit',
   displayName: 'Maven (JUnit)',
-  language: 'java',
+  platform: 'jvm',
 
   detect: (folderPath) => pathExists(join(folderPath, 'pom.xml')),
 

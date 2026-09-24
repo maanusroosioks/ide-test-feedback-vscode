@@ -7,13 +7,8 @@ import {
   type TestIntegrity,
   type TestIntegrityEntry,
 } from './integrity';
-import {
-  languageForFile,
-  matchDeclaration,
-  scanTestDeclarations,
-  type SourceLanguage,
-  type TestDeclaration,
-} from '../source';
+import { languageForFile, scanTestDeclarations, type SourceLanguage } from '../languages';
+import { matchDeclaration, type TestDeclaration } from '../source';
 import type { NormalizedTestRun } from '../core/types';
 import { REQUEST_LIMITS } from '../services/httpTypes';
 
@@ -129,7 +124,7 @@ export async function collectTestEvidence(
     let file: SourceFile | undefined;
     try {
       const text = toLf(await read(absolutePath));
-      const language = languageForFile(absolutePath, run.language);
+      const language = languageForFile(absolutePath, run.platform);
       file = {
         relativePath: toRelative(options.folderPath, absolutePath),
         text,

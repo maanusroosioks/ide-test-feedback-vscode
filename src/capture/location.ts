@@ -1,8 +1,8 @@
 import { readdir } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { pathExists } from '../util/shell';
-import type { RunLanguage } from '../core/types';
-import { RUN_LANGUAGES, type RunLanguageProfile, type StackFrame } from '../languages';
+import type { Platform } from '../core/types';
+import { PLATFORMS, type PlatformProfile, type StackFrame } from '../languages';
 
 export type { StackFrame };
 
@@ -43,10 +43,10 @@ interface IndexedFrame {
 }
 
 /** Several rules can match one trace, so frames are put back in the order they appear in it. */
-export function parseStackFrames(stackTrace: string, language: RunLanguage): StackFrame[] {
+export function parseStackFrames(stackTrace: string, platform: Platform): StackFrame[] {
   const found: IndexedFrame[] = [];
 
-  for (const { pattern, toFrame } of RUN_LANGUAGES[language].stackFrames) {
+  for (const { pattern, toFrame } of PLATFORMS[platform].stackFrames) {
     pattern.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(stackTrace)) !== null) {
@@ -89,7 +89,7 @@ export interface TestLocationResolverDeps {
 export class TestLocationResolver {
   private readonly exists: ExistsFn;
   private readonly listDirs: ListDirsFn;
-  private readonly profile: RunLanguageProfile;
+  private readonly profile: PlatformProfile;
   private readonly existsCache = new Map<string, Promise<boolean>>();
   private readonly suiteFiles = new Map<string, Promise<string | undefined>>();
   private readonly frameFiles = new Map<string, Promise<string | undefined>>();
@@ -97,12 +97,12 @@ export class TestLocationResolver {
 
   constructor(
     private readonly folderPath: string,
-    private readonly language: RunLanguage,
+    private readonly platform: Platform,
     deps: TestLocationResolverDeps = {},
   ) {
     this.exists = deps.exists ?? pathExists;
     this.listDirs = deps.listDirs ?? defaultListDirs;
-    this.profile = RUN_LANGUAGES[language];
+    this.profile = PLATFORMS[platform];
   }
 
   async resolveSuiteFile(testSuite: string | undefined): Promise<string | undefined> {
@@ -121,7 +121,7 @@ export class TestLocationResolver {
     stackTrace: string | undefined,
   ): Promise<SourceLocation | undefined> {
     const suiteFile = await this.resolveSuiteFile(testSuite);
-    const frames = stackTrace ? parseStackFrames(stackTrace, this.language) : [];
+    const frames = stackTrace ? parseStackFrames(stackTrace, this.platform) : [];
 
     let fallback: SourceLocation | undefined;
     for (const frame of frames) {
