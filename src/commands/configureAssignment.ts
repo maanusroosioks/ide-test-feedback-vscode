@@ -1,17 +1,8 @@
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import * as vscode from 'vscode';
 import type { AuthService } from '../auth/authService';
-import {
-  getAssignmentKeySetting,
-  getRequestTimeoutMs,
-  getServiceUrl,
-  setAssignmentKey,
-  setServiceUrl,
-} from '../config/settings';
-import { assignmentKeyProblem } from '../services/httpTypes';
+import { getRequestTimeoutMs, getServiceUrl, setServiceUrl } from '../config/settings';
 import { WORKSPACE_CONFIG_FILE_NAME } from '../core/submissionMetadata';
-import { pathExists } from '../util/shell';
+import { promptAndSaveAssignmentKey } from '../ui/assignmentKey';
 import { pickWorkspaceFolder } from '../ui/workspacePicker';
 
 function validateUrl(value: string): string | undefined {
@@ -31,12 +22,6 @@ function validateUrl(value: string): string | undefined {
   return undefined;
 }
 
-/** Blank is allowed: the setting is only a fallback for projects without a .moodle-submit.json. */
-function validateAssignmentKey(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? assignmentKeyProblem(trimmed) : undefined;
-}
-
 async function reportReachability(baseUrl: string): Promise<void> {
   const url = baseUrl.replace(/\/+$/, '');
   const controller = new AbortController();
@@ -51,39 +36,6 @@ async function reportReachability(baseUrl: string): Promise<void> {
   } finally {
     clearTimeout(timeout);
   }
-}
-
-async function offerAssignmentFile(): Promise<void> {
-  const folder = await pickWorkspaceFolder(
-    `Which project should get the ${WORKSPACE_CONFIG_FILE_NAME} file?`,
-  );
-  if (!folder) {
-    return;
-  }
-
-  const target = join(folder.uri.fsPath, WORKSPACE_CONFIG_FILE_NAME);
-  if (await pathExists(target)) {
-    return;
-  }
-
-  const choice = await vscode.window.showInformationMessage(
-    `Add a ${WORKSPACE_CONFIG_FILE_NAME} to "${folder.name}" for a per-project assignment key?`,
-    'Create',
-    'Skip',
-  );
-  if (choice !== 'Create') {
-    return;
-  }
-
-  const body = `${JSON.stringify({ assignmentKey: 'REPLACE_WITH_YOUR_ASSIGNMENT_KEY' }, null, 2)}\n`;
-  try {
-    await writeFile(target, body, { flag: 'wx' });
-  } catch {
-    void vscode.window.showWarningMessage(`Could not create ${target}.`);
-    return;
-  }
-  const doc = await vscode.workspace.openTextDocument(target);
-  await vscode.window.showTextDocument(doc);
 }
 
 export function registerConfigureAssignmentCommand(
@@ -106,14 +58,11 @@ export function registerConfigureAssignmentCommand(
       await setServiceUrl(trimmedUrl);
       await reportReachability(trimmedUrl);
 
-      const assignmentKey = await vscode.window.showInputBox({
-        prompt: 'Fallback assignment key (used only when a project has no .moodle-submit.json)',
-        value: getAssignmentKeySetting() ?? '',
-        ignoreFocusOut: true,
-        validateInput: validateAssignmentKey,
-      });
-      if (assignmentKey !== undefined) {
-        await setAssignmentKey(assignmentKey.trim());
+      const folder = await pickWorkspaceFolder(
+        `Which project's ${WORKSPACE_CONFIG_FILE_NAME} should get the assignment key?`,
+      );
+      if (folder) {
+        await promptAndSaveAssignmentKey(folder);
       }
 
       if (!(await authService.isSignedIn())) {
@@ -126,8 +75,6 @@ export function registerConfigureAssignmentCommand(
           await vscode.commands.executeCommand('moodleSubmit.login');
         }
       }
-
-      await offerAssignmentFile();
 
       void vscode.window.showInformationMessage('Moodle Submit configuration saved.');
     }),

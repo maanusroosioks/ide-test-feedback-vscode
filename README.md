@@ -13,7 +13,7 @@ account.
 - **Run-only mode** to check tests locally without submitting.
 - **Microsoft / Entra ID sign-in** via VS Code's built-in authentication — the
   extension stores no passwords or tokens.
-- **Per-project or global assignment keys** through `.moodle-submit.json` or settings.
+- **Per-project assignment keys** in a `.moodle-submit.json` that can ship with the starter code.
 - **The source of each test is submitted with its result**, so your instructor sees the
   code behind every pass and fail.
 - Guided first-run setup, status-bar progress, and a dedicated output log.
@@ -23,15 +23,18 @@ account.
 1. Install the extension.
 2. Run **Moodle Submit: Configure Assignment** and enter the submission service URL
    your course provides (e.g. `https://moodle-bridge.example.edu`).
-3. Enter a fallback assignment key, or add a `.moodle-submit.json` to each project
-   (the configure command offers to create one).
+3. Enter the project's assignment key when asked. It's saved to the project's
+   `.moodle-submit.json`; if your instructor's starter code already has one, just
+   confirm it.
 4. Sign in with Microsoft when prompted.
 5. Open a project with tests and run **Run Tests & Submit to Moodle**.
 
 ### `.moodle-submit.json`
 
-Placed at the root of a workspace folder. Only `assignmentKey` is required (and it
-can instead come from the `moodleSubmit.assignmentKey` setting).
+Placed at the root of a workspace folder, and meant to be committed — an instructor can ship
+it with the starter code so students never type the key. It identifies the assignment and
+nothing else. Only `assignmentKey` is required; `projectName` defaults to the folder name.
+VS Code validates the file as you edit it.
 
 ```json
 {
@@ -39,6 +42,9 @@ can instead come from the `moodleSubmit.assignmentKey` setting).
   "projectName": "linked-list"
 }
 ```
+
+The commit and repository URL are always read from git, never from this file. Submitting from
+a project without a key asks for one before the tests run.
 
 ## Test Explorer
 
@@ -75,7 +81,7 @@ Current limitations:
 | Moodle Submit: Run Tests (No Submit) | Detect, run, and parse only. |
 | Moodle Submit: Sign In with Microsoft | Start a Microsoft auth session. |
 | Moodle Submit: Sign Out | Explains how to remove the account from the Accounts menu. |
-| Moodle Submit: Configure Assignment | Set the service URL and fallback assignment key. |
+| Moodle Submit: Configure Assignment | Set the service URL and the project's assignment key. |
 | Moodle Submit: Show Log | Reveal the output channel. |
 
 ## What gets submitted
@@ -135,17 +141,37 @@ always has a matching `testFiles` entry.
 
 ## Settings
 
+Settings cover your machine and preferences; what the assignment *is* lives in
+`.moodle-submit.json`.
+
+**Connection** — user settings only. A project's `.vscode/settings.json` cannot set these, so a
+cloned repository can't redirect where your sign-in token is sent.
+
 | Setting | Default | Description |
 | --- | --- | --- |
 | `moodleSubmit.serviceUrl` | `""` | Base URL of the submission service. |
-| `moodleSubmit.requestTimeoutMs` | `15000` | Timeout for requests to the service. |
-| `moodleSubmit.assignmentKey` | `""` | Fallback key when no `.moodle-submit.json` is present. |
-| `moodleSubmit.authScopes` | Entra ID scopes for the standard service | OAuth scopes requested from the Microsoft provider. Change only for a different deployment. |
-| `moodleSubmit.testCommandOverrides` | `{}` | Per-adapter command overrides, e.g. `{ "maven-junit": "mvn -Pci test" }`. |
+| `moodleSubmit.authScopes` | `["User.Read"]` | OAuth scopes requested from the Microsoft provider. Change only for a different deployment. |
+| `moodleSubmit.requestTimeoutMs` | `15000` | Timeout for requests to the service (1 000–120 000). |
+
+**Running tests** — can differ per folder.
+
+| Setting | Default | Description |
+| --- | --- | --- |
 | `moodleSubmit.preferredAdapter` | – | Force `maven-junit`, `gradle-junit`, `pytest`, or `dotnet-test` instead of auto-detecting. |
+| `moodleSubmit.testCommandOverrides` | `{}` | Per-adapter command overrides, e.g. `{ "maven-junit": "mvn -Pci test" }`. |
+
+**Source capture** — can differ per folder.
+
+| Setting | Default | Description |
+| --- | --- | --- |
 | `moodleSubmit.submitTestSource` | `true` | Submit the source of each test. Turning this off still submits where each test was found. |
-| `moodleSubmit.maxTotalSourceChars` | `500000` | Cap on the source captured per submission (hard ceiling 1 000 000). |
+| `moodleSubmit.maxTotalSourceChars` | `500000` | Cap on the source captured per submission (at most 1 000 000). |
 | `moodleSubmit.warnOnSuspiciousTests` | `true` | Warn before submitting when tests look emptied or disabled. Never blocks. |
+
+### Workspace trust
+
+Running tests executes the project's own build and test code, so the extension is disabled in
+Restricted Mode. Trust the folder to use it.
 
 ## Supported test frameworks
 

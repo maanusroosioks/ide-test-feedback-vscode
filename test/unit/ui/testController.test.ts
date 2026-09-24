@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,6 +66,7 @@ beforeEach(async () => {
   testFile = join(folderPath, 'tests', 'test_math.py');
   await mkdir(join(folderPath, 'tests'));
   await writeFile(testFile, TEST_FILE, 'utf8');
+  await writeFile(join(folderPath, '.moodle-submit.json'), '{ "assignmentKey": "assignment-7" }', 'utf8');
   workspace.workspaceFolders = [workspaceFolder(folderPath, 'calculator')];
   configValues.set('serviceUrl', 'https://bridge.example.edu');
 
@@ -403,8 +404,47 @@ describe('performRun — submitting', () => {
     expect(runTests).not.toHaveBeenCalled();
   });
 
+  it('asks for a missing assignment key before running, and stops if the user backs out', async () => {
+    await rm(join(folderPath, '.moodle-submit.json'));
+    const { control, controller } = setup();
+
+    await performRun(control, { submit: true });
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      '"calculator" has no assignment key. Add one to its .moodle-submit.json?',
+      'Add key',
+    );
+    expect(controller.runs).toHaveLength(0);
+    expect(runTests).not.toHaveBeenCalled();
+  });
+
+  it('saves a key entered at the prompt and goes on to run', async () => {
+    await rm(join(folderPath, '.moodle-submit.json'));
+    window.showWarningMessage.mockResolvedValueOnce('Add key');
+    window.showInputBox.mockResolvedValueOnce(' assignment-9 ');
+    const { control } = setup();
+    testsRan(PASSING);
+
+    await performRun(control, { submit: true });
+
+    expect(JSON.parse(await readFile(join(folderPath, '.moodle-submit.json'), 'utf8'))).toEqual({
+      assignmentKey: 'assignment-9',
+    });
+    expect(submitRun).toHaveBeenCalledOnce();
+  });
+
+  it('does not ask for a key when only running', async () => {
+    await rm(join(folderPath, '.moodle-submit.json'));
+    const { control } = setup();
+    testsRan(PASSING);
+
+    await performRun(control, { submit: false });
+
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(runTests).toHaveBeenCalledOnce();
+  });
+
   it('signs in first, then runs, then submits the run with its evidence', async () => {
-    configValues.set('assignmentKey', 'assignment-7');
     const { control, controller, authService } = setup();
     testsRan(PASSING);
     const report = vi.fn();
@@ -417,7 +457,7 @@ describe('performRun — submitting', () => {
 
     const [run, submitContext] = vi.mocked(submitRun).mock.calls[0];
     expect(run.results).toEqual(PASSING);
-    expect(submitContext).toMatchObject({ folderPath, projectName: 'calculator', assignmentKeySetting: 'assignment-7' });
+    expect(submitContext).toMatchObject({ folderPath, projectName: 'calculator' });
     expect(submitContext.evidence?.sources).toEqual([
       { kind: 'TEST', filePath: 'tests/test_math.py', startLine: 1, endLine: 2 },
     ]);

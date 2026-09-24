@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import type { AdapterRegistry } from '../runner/registry';
 import type { AuthService } from '../auth/authService';
 import {
-  getAssignmentKeySetting,
   getSourceCaptureSettings,
   getWarnOnSuspiciousTests,
 } from '../config/settings';
@@ -25,6 +24,7 @@ import type { NormalizedTestCase, NormalizedTestRun } from '../core/types';
 import { describeError } from '../core/errors';
 import { handleCommandError } from './errorHandling';
 import { ensureConfigured } from './onboarding';
+import { ensureAssignmentKey } from './assignmentKey';
 import type { MoodleApiClient } from '../services/moodleApiClient';
 import { confirmDegradedRun, describeFinding } from './degradedRunPrompt';
 import type { Logger, StatusReporter } from '../core/ports';
@@ -322,7 +322,7 @@ export function registerTestController(
     signal,
     report,
   }: PerformRunOptions): Promise<void> {
-    if (submit && !(await ensureConfigured(context))) {
+    if (submit && !((await ensureConfigured(context)) && (await ensureAssignmentKey(folder)))) {
       return;
     }
 
@@ -384,7 +384,6 @@ export function registerTestController(
         {
           folderPath: folder.uri.fsPath,
           projectName: folder.name,
-          assignmentKeySetting: getAssignmentKeySetting(),
           evidence: evidence?.payload,
         },
         { apiClient: deps.apiClient, logger: deps.logger },

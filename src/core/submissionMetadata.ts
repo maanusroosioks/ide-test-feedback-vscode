@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runCommand } from '../util/shell';
 import { MoodleSubmitError } from './errors';
@@ -16,7 +16,7 @@ export class MissingAssignmentKeyError extends MoodleSubmitError {
   constructor() {
     super(
       'No assignmentKey configured. Add one via the "Moodle Submit: Configure Assignment" command, ' +
-        'a .moodle-submit.json file in the workspace, or the moodleSubmit.assignmentKey setting.',
+        `or add a ${WORKSPACE_CONFIG_FILE_NAME} file to the project.`,
     );
   }
 }
@@ -27,18 +27,18 @@ export class InvalidWorkspaceConfigError extends MoodleSubmitError {
   }
 }
 
-export type WorkspaceConfigFile = Partial<SubmissionMetadata>;
+/** The project's identity only: the commit and repository always come from git. */
+export type WorkspaceConfigFile = Partial<Pick<SubmissionMetadata, 'assignmentKey' | 'projectName'>>;
 
 export interface MetadataSources {
   workspaceFile?: WorkspaceConfigFile;
-  assignmentKeySetting?: string;
   defaultProjectName?: string;
   gitCommitHash?: string;
   gitRemoteUrl?: string;
 }
 
 export function resolveSubmissionMetadata(sources: MetadataSources): SubmissionMetadata {
-  const assignmentKey = sources.workspaceFile?.assignmentKey ?? sources.assignmentKeySetting;
+  const assignmentKey = sources.workspaceFile?.assignmentKey;
   if (!assignmentKey) {
     throw new MissingAssignmentKeyError();
   }
@@ -46,8 +46,9 @@ export function resolveSubmissionMetadata(sources: MetadataSources): SubmissionM
   return {
     assignmentKey,
     projectName: sources.workspaceFile?.projectName ?? sources.defaultProjectName,
-    commitHash: sources.workspaceFile?.commitHash ?? sources.gitCommitHash,
-    repoUrl: sources.workspaceFile?.repoUrl ?? sources.gitRemoteUrl,
+    // A student-edited file could otherwise claim any commit or repository.
+    commitHash: sources.gitCommitHash,
+    repoUrl: sources.gitRemoteUrl,
   };
 }
 
@@ -55,7 +56,8 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-export async function readWorkspaceConfigFile(folderPath: string): Promise<WorkspaceConfigFile | undefined> {
+/** `undefined` when the file doesn't exist; throws when it exists but isn't a JSON object. */
+async function readConfigRecord(folderPath: string): Promise<Record<string, unknown> | undefined> {
   let raw: string;
   try {
     raw = await readFile(join(folderPath, WORKSPACE_CONFIG_FILE_NAME), 'utf8');
@@ -69,17 +71,26 @@ export async function readWorkspaceConfigFile(folderPath: string): Promise<Works
   } catch {
     throw new InvalidWorkspaceConfigError('it is not valid JSON');
   }
-  if (typeof parsed !== 'object' || parsed === null) {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new InvalidWorkspaceConfigError('the top level must be a JSON object');
   }
+  return parsed as Record<string, unknown>;
+}
 
-  const record = parsed as Record<string, unknown>;
+export async function readWorkspaceConfigFile(folderPath: string): Promise<WorkspaceConfigFile | undefined> {
+  const record = await readConfigRecord(folderPath);
+  if (!record) return undefined;
   return {
     assignmentKey: optionalString(record.assignmentKey),
     projectName: optionalString(record.projectName),
-    commitHash: optionalString(record.commitHash),
-    repoUrl: optionalString(record.repoUrl),
   };
+}
+
+/** Creates the file, or sets the key in an existing one while keeping its other fields. */
+export async function writeWorkspaceAssignmentKey(folderPath: string, assignmentKey: string): Promise<void> {
+  const record = (await readConfigRecord(folderPath)) ?? {};
+  const body = `${JSON.stringify({ ...record, assignmentKey }, null, 2)}\n`;
+  await writeFile(join(folderPath, WORKSPACE_CONFIG_FILE_NAME), body, 'utf8');
 }
 
 export async function readGitCommitHash(folderPath: string): Promise<string | undefined> {

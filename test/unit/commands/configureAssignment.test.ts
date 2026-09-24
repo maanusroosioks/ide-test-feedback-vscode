@@ -78,15 +78,13 @@ describe('configureAssignment command', () => {
     expect(window.showInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('pre-fills both prompts with the current settings', async () => {
+  it('pre-fills the URL prompt with the current setting', async () => {
     configValues.set('serviceUrl', 'https://old.example.edu');
-    configValues.set('assignmentKey', 'old-key');
-    enterInputs('https://old.example.edu', 'old-key');
+    enterInputs('https://old.example.edu');
 
     await invokeCommand(COMMAND);
 
     expect(inputBoxOptions(0).value).toBe('https://old.example.edu');
-    expect(inputBoxOptions(1).value).toBe('old-key');
   });
 
   it('validates the service URL', async () => {
@@ -101,34 +99,22 @@ describe('configureAssignment command', () => {
     expect(validate('  http://localhost:8080  ')).toBeUndefined();
   });
 
-  it('validates the assignment key but allows leaving it blank', async () => {
-    enterInputs('https://bridge.example.edu', undefined);
-    await invokeCommand(COMMAND);
-    const validate = inputBoxOptions(1).validateInput;
-
-    expect(validate('')).toBeUndefined();
-    expect(validate('   ')).toBeUndefined();
-    expect(validate('assignment-7')).toBeUndefined();
-    expect(validate('has spaces')).toContain('may only contain');
-  });
-
-  it('saves the trimmed URL and key', async () => {
-    enterInputs('  https://bridge.example.edu  ', '  assignment-7 ');
+  it('saves the trimmed URL to user settings', async () => {
+    enterInputs('  https://bridge.example.edu  ');
 
     await invokeCommand(COMMAND);
 
+    expect(configUpdate).toHaveBeenCalledOnce();
     expect(configUpdate).toHaveBeenCalledWith('serviceUrl', 'https://bridge.example.edu', ConfigurationTarget.Global);
-    expect(configUpdate).toHaveBeenCalledWith('assignmentKey', 'assignment-7', ConfigurationTarget.Global);
     expect(messagesShown(window.showInformationMessage)).toContain('Moodle Submit configuration saved.');
   });
 
-  it('leaves the assignment key alone when that prompt is cancelled', async () => {
-    enterInputs('https://bridge.example.edu', undefined);
+  it('skips the assignment key when no folder is open', async () => {
+    enterInputs('https://bridge.example.edu');
 
     await invokeCommand(COMMAND);
 
-    expect(configUpdate).toHaveBeenCalledTimes(1);
-    expect(configUpdate.mock.calls[0][0]).toBe('serviceUrl');
+    expect(window.showInputBox).toHaveBeenCalledOnce();
   });
 
   it('checks the service is reachable, ignoring trailing slashes', async () => {
@@ -179,7 +165,7 @@ describe('configureAssignment command', () => {
   });
 });
 
-describe('configureAssignment command — per-project config file', () => {
+describe('configureAssignment command — assignment key', () => {
   let folderPath: string;
   let target: string;
 
@@ -187,58 +173,75 @@ describe('configureAssignment command — per-project config file', () => {
     folderPath = await mkdtemp(join(tmpdir(), 'moodle-configure-'));
     target = join(folderPath, '.moodle-submit.json');
     workspace.workspaceFolders = [workspaceFolder(folderPath, 'calculator')];
-    enterInputs('https://bridge.example.edu', undefined);
   });
 
-  it('creates a placeholder file and opens it on "Create"', async () => {
-    answerMessages(window.showInformationMessage, { 'Add a .moodle-submit.json': 'Create' });
+  it('creates the file with the trimmed key', async () => {
+    enterInputs('https://bridge.example.edu', '  assignment-7 ');
 
     await invokeCommand(COMMAND);
 
-    expect(messagesShown(window.showInformationMessage)).toContain(
-      'Add a .moodle-submit.json to "calculator" for a per-project assignment key?',
-    );
-    expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({
-      assignmentKey: 'REPLACE_WITH_YOUR_ASSIGNMENT_KEY',
-    });
-    expect(workspace.openTextDocument).toHaveBeenCalledWith(target);
-    expect(window.showTextDocument).toHaveBeenCalledOnce();
+    expect(inputBoxOptions(1).value).toBe('');
+    expect(await readFile(target, 'utf8')).toBe('{\n  "assignmentKey": "assignment-7"\n}\n');
   });
 
-  it('writes nothing on "Skip"', async () => {
-    answerMessages(window.showInformationMessage, { 'Add a .moodle-submit.json': 'Skip' });
+  it('requires a valid, non-blank key', async () => {
+    enterInputs('https://bridge.example.edu', undefined);
+    await invokeCommand(COMMAND);
+    const validate = inputBoxOptions(1).validateInput;
+
+    expect(validate('   ')).toBe('The assignment key must not be blank.');
+    expect(validate('has spaces')).toContain('may only contain');
+    expect(validate(' assignment-7 ')).toBeUndefined();
+  });
+
+  it('writes nothing when the key prompt is cancelled', async () => {
+    enterInputs('https://bridge.example.edu', undefined);
 
     await invokeCommand(COMMAND);
 
     expect(await pathExists(target)).toBe(false);
   });
 
-  it('never offers to replace an existing file', async () => {
-    await writeFile(target, '{"assignmentKey":"mine"}', 'utf8');
-    answerMessages(window.showInformationMessage, { 'Add a .moodle-submit.json': 'Create' });
+  it('pre-fills from the file and updates the key while keeping other fields', async () => {
+    await writeFile(target, '{"projectName":"linked-list","assignmentKey":"old-key"}', 'utf8');
+    enterInputs('https://bridge.example.edu', 'new-key');
 
     await invokeCommand(COMMAND);
 
-    expect(messagesShown(window.showInformationMessage).some((m) => m.startsWith('Add a'))).toBe(false);
-    expect(await readFile(target, 'utf8')).toBe('{"assignmentKey":"mine"}');
+    expect(inputBoxOptions(1).value).toBe('old-key');
+    expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({ projectName: 'linked-list', assignmentKey: 'new-key' });
+  });
+
+  it('leaves the file untouched when the key is unchanged', async () => {
+    const original = '{ "assignmentKey": "mine" }';
+    await writeFile(target, original, 'utf8');
+    enterInputs('https://bridge.example.edu', 'mine');
+
+    await invokeCommand(COMMAND);
+
+    expect(await readFile(target, 'utf8')).toBe(original);
+  });
+
+  it('warns and leaves an unreadable file alone', async () => {
+    await writeFile(target, '{ not json', 'utf8');
+    enterInputs('https://bridge.example.edu', 'assignment-7');
+
+    await invokeCommand(COMMAND);
+
+    expect(messagesShown(window.showWarningMessage)).toContain(
+      'Could not save the assignment key for "calculator": .moodle-submit.json could not be read: it is not valid JSON.',
+    );
+    expect(await readFile(target, 'utf8')).toBe('{ not json');
+    expect(messagesShown(window.showInformationMessage)).toContain('Moodle Submit configuration saved.');
   });
 
   it('warns instead of failing when the file cannot be written', async () => {
     workspace.workspaceFolders = [workspaceFolder(join(folderPath, 'missing-dir'), 'gone')];
-    answerMessages(window.showInformationMessage, { 'Add a .moodle-submit.json': 'Create' });
+    enterInputs('https://bridge.example.edu', 'assignment-7');
 
     await invokeCommand(COMMAND);
 
-    expect(messagesShown(window.showWarningMessage)[0]).toMatch(/^Could not create .*\.moodle-submit\.json\.$/);
-    expect(workspace.openTextDocument).not.toHaveBeenCalled();
+    expect(messagesShown(window.showWarningMessage)[0]).toMatch(/^Could not save the assignment key for "gone": /);
     expect(messagesShown(window.showInformationMessage)).toContain('Moodle Submit configuration saved.');
-  });
-
-  it('skips the offer when no folder is open', async () => {
-    workspace.workspaceFolders = undefined;
-
-    await invokeCommand(COMMAND);
-
-    expect(messagesShown(window.showInformationMessage).some((m) => m.startsWith('Add a'))).toBe(false);
   });
 });

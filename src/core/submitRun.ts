@@ -13,7 +13,6 @@ import type { NormalizedTestRun } from './types';
 export interface SubmitRunContext {
   folderPath: string;
   projectName: string;
-  assignmentKeySetting?: string;
   /** Absent when source capture was skipped or failed — submission goes ahead either way. */
   evidence?: TestEvidencePayload;
 }
@@ -25,7 +24,7 @@ export interface SubmitRunDeps {
 
 export async function submitRun(
   run: NormalizedTestRun,
-  { folderPath, projectName, assignmentKeySetting, evidence }: SubmitRunContext,
+  { folderPath, projectName, evidence }: SubmitRunContext,
   { apiClient, logger }: SubmitRunDeps,
 ): Promise<SubmitResult> {
   const workspaceFile = await readWorkspaceConfigFile(folderPath);
@@ -35,7 +34,6 @@ export async function submitRun(
   ]);
   const metadata = resolveSubmissionMetadata({
     workspaceFile,
-    assignmentKeySetting,
     defaultProjectName: projectName,
     gitCommitHash,
     gitRemoteUrl,

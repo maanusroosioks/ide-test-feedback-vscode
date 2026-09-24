@@ -13,6 +13,12 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Running tests executes the project's own build and test code, so the extension only runs in trusted workspaces."
+    }
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -63,64 +69,90 @@
         }
       ]
     },
-    "configuration": {
-      "title": "Moodle Test Submit",
-      "properties": {
-        "moodleSubmit.serviceUrl": {
-          "type": "string",
-          "default": "",
-          "description": "Base URL of the Java submission service (e.g. https://moodle-bridge.example.edu)."
-        },
-        "moodleSubmit.requestTimeoutMs": {
-          "type": "number",
-          "default": 15000,
-          "description": "Timeout in milliseconds for requests to the submission service."
-        },
-        "moodleSubmit.assignmentKey": {
-          "type": "string",
-          "default": "",
-          "description": "Fallback assignment key, used when the workspace has no .moodle-submit.json file."
-        },
-        "moodleSubmit.authScopes": {
-          "type": "array",
-          "items": {
-            "type": "string"
+    "configuration": [
+      {
+        "id": "connection",
+        "title": "Connection",
+        "order": 1,
+        "properties": {
+          "moodleSubmit.serviceUrl": {
+            "type": "string",
+            "default": "",
+            "description": "Base URL of the submission service (e.g. https://moodle-bridge.example.edu). Can only be set in user settings, so a project cannot redirect where your sign-in token is sent.",
+            "scope": "machine"
           },
-          "default": ["User.Read"],
-          "description": "OAuth scopes to request from the Microsoft authentication provider. The default targets the standard submission service's Entra ID App Registration — only change this if you're pointing at a different deployment."
-        },
-        "moodleSubmit.testCommandOverrides": {
-          "type": "object",
-          "default": {},
-          "description": "Per-adapter command overrides, e.g. { \"maven-junit\": \"mvn -Pci test\" }, for projects with nonstandard build setups. Give a single command with no shell operators (&&, |, ;): the reporting flags that let the extension read the results are appended to whatever you put here."
-        },
-        "moodleSubmit.preferredAdapter": {
-          "type": "string",
-          "enum": [
-            "maven-junit",
-            "gradle-junit",
-            "pytest",
-            "dotnet-test"
-          ],
-          "description": "Force a specific test adapter instead of relying on auto-detection."
-        },
-        "moodleSubmit.submitTestSource": {
-          "type": "boolean",
-          "default": true,
-          "description": "Submit the source of each test that ran, so your instructor sees the code behind each result. Turning this off still submits the results and where each test was found."
-        },
-        "moodleSubmit.maxTotalSourceChars": {
-          "type": "number",
-          "default": 500000,
-          "description": "Largest amount of source captured across one submission. Once it's used up, the remaining files are submitted without their content."
-        },
-        "moodleSubmit.warnOnSuspiciousTests": {
-          "type": "boolean",
-          "default": true,
-          "description": "Warn before submitting when tests look emptied or disabled. The warning never blocks a submission."
+          "moodleSubmit.authScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "User.Read"
+            ],
+            "description": "OAuth scopes to request from the Microsoft authentication provider. The default targets the standard submission service's Entra ID App Registration — only change this if you're pointing at a different deployment. Can only be set in user settings.",
+            "scope": "machine"
+          },
+          "moodleSubmit.requestTimeoutMs": {
+            "type": "number",
+            "default": 15000,
+            "description": "Timeout in milliseconds for requests to the submission service.",
+            "minimum": 1000,
+            "maximum": 120000
+          }
+        }
+      },
+      {
+        "id": "running",
+        "title": "Running Tests",
+        "order": 2,
+        "properties": {
+          "moodleSubmit.preferredAdapter": {
+            "type": "string",
+            "enum": [
+              "maven-junit",
+              "gradle-junit",
+              "pytest",
+              "dotnet-test"
+            ],
+            "description": "Force a specific test adapter instead of relying on auto-detection.",
+            "scope": "resource"
+          },
+          "moodleSubmit.testCommandOverrides": {
+            "type": "object",
+            "default": {},
+            "description": "Per-adapter command overrides, e.g. { \"maven-junit\": \"mvn -Pci test\" }, for projects with nonstandard build setups. Give a single command with no shell operators (&&, |, ;): the reporting flags that let the extension read the results are appended to whatever you put here.",
+            "scope": "resource"
+          }
+        }
+      },
+      {
+        "id": "sourceCapture",
+        "title": "Source Capture",
+        "order": 3,
+        "properties": {
+          "moodleSubmit.submitTestSource": {
+            "type": "boolean",
+            "default": true,
+            "description": "Submit the source of each test that ran, so your instructor sees the code behind each result. Turning this off still submits the results and where each test was found.",
+            "scope": "resource"
+          },
+          "moodleSubmit.maxTotalSourceChars": {
+            "type": "number",
+            "default": 500000,
+            "description": "Largest amount of source captured across one submission. Once it's used up, the remaining files are submitted without their content.",
+            "scope": "resource",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "moodleSubmit.warnOnSuspiciousTests": {
+            "type": "boolean",
+            "default": true,
+            "description": "Warn before submitting when tests look emptied or disabled. The warning never blocks a submission.",
+            "scope": "resource"
+          }
         }
       }
-    },
+    ],
     "walkthroughs": [
       {
         "id": "setup",
@@ -162,6 +194,12 @@
             ]
           }
         ]
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": ".moodle-submit.json",
+        "url": "./schemas/moodle-submit.schema.json"
       }
     ]
   },

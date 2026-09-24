@@ -1,44 +1,94 @@
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  InvalidWorkspaceConfigError,
   MissingAssignmentKeyError,
   normalizeRemoteUrl,
+  readWorkspaceConfigFile,
   resolveSubmissionMetadata,
+  writeWorkspaceAssignmentKey,
 } from '../../../src/core/submissionMetadata';
 
 describe('resolveSubmissionMetadata', () => {
-  it('prefers the workspace file over the settings fallback', () => {
+  it('takes the key and project name from the workspace file, and the rest from git', () => {
     const metadata = resolveSubmissionMetadata({
       workspaceFile: { assignmentKey: 'from-file', projectName: 'file-project' },
-      assignmentKeySetting: 'from-settings',
-      defaultProjectName: 'default-project',
-    });
-
-    expect(metadata).toEqual({
-      assignmentKey: 'from-file',
-      projectName: 'file-project',
-      commitHash: undefined,
-      repoUrl: undefined,
-    });
-  });
-
-  it('falls back to the settings value and derived defaults when no workspace file is present', () => {
-    const metadata = resolveSubmissionMetadata({
-      assignmentKeySetting: 'from-settings',
       defaultProjectName: 'default-project',
       gitCommitHash: 'abc123',
       gitRemoteUrl: 'https://github.com/org/repo',
     });
 
     expect(metadata).toEqual({
-      assignmentKey: 'from-settings',
-      projectName: 'default-project',
+      assignmentKey: 'from-file',
+      projectName: 'file-project',
       commitHash: 'abc123',
       repoUrl: 'https://github.com/org/repo',
     });
   });
 
-  it('throws MissingAssignmentKeyError when no assignmentKey is available anywhere', () => {
-    expect(() => resolveSubmissionMetadata({})).toThrow(MissingAssignmentKeyError);
+  it('falls back to the folder name when the file names no project', () => {
+    const metadata = resolveSubmissionMetadata({
+      workspaceFile: { assignmentKey: 'from-file' },
+      defaultProjectName: 'default-project',
+    });
+
+    expect(metadata.projectName).toBe('default-project');
+  });
+
+  it.each([undefined, {}])('throws MissingAssignmentKeyError when the file has no key (%o)', (workspaceFile) => {
+    expect(() => resolveSubmissionMetadata({ workspaceFile })).toThrow(MissingAssignmentKeyError);
+  });
+});
+
+describe('workspace config file', () => {
+  async function folderWith(content?: string): Promise<{ folderPath: string; target: string }> {
+    const folderPath = await mkdtemp(join(tmpdir(), 'moodle-metadata-'));
+    const target = join(folderPath, '.moodle-submit.json');
+    if (content !== undefined) await writeFile(target, content, 'utf8');
+    return { folderPath, target };
+  }
+
+  it('reads only the assignment key and project name', async () => {
+    const { folderPath } = await folderWith(
+      '{"assignmentKey":"a-1","projectName":"p","commitHash":"forged","repoUrl":"https://example.com/x"}',
+    );
+
+    expect(await readWorkspaceConfigFile(folderPath)).toEqual({ assignmentKey: 'a-1', projectName: 'p' });
+  });
+
+  it('is undefined when the file does not exist', async () => {
+    const { folderPath } = await folderWith();
+    expect(await readWorkspaceConfigFile(folderPath)).toBeUndefined();
+  });
+
+  it.each(['{ not json', '[]', '"key"'])('rejects %s', async (content) => {
+    const { folderPath } = await folderWith(content);
+    await expect(readWorkspaceConfigFile(folderPath)).rejects.toBeInstanceOf(InvalidWorkspaceConfigError);
+  });
+
+  it('writes a new file with just the key', async () => {
+    const { folderPath, target } = await folderWith();
+
+    await writeWorkspaceAssignmentKey(folderPath, 'a-1');
+
+    expect(await readFile(target, 'utf8')).toBe('{\n  "assignmentKey": "a-1"\n}\n');
+  });
+
+  it('replaces the key in an existing file and keeps its other fields', async () => {
+    const { folderPath, target } = await folderWith('{"assignmentKey":"old","projectName":"p"}');
+
+    await writeWorkspaceAssignmentKey(folderPath, 'new');
+
+    expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({ assignmentKey: 'new', projectName: 'p' });
+  });
+
+  it('refuses to overwrite a file it cannot parse', async () => {
+    const { folderPath, target } = await folderWith('{ not json');
+
+    await expect(writeWorkspaceAssignmentKey(folderPath, 'a-1')).rejects.toBeInstanceOf(InvalidWorkspaceConfigError);
+    expect(await readFile(target, 'utf8')).toBe('{ not json');
   });
 });
 

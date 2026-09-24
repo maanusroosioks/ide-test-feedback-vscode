@@ -7,8 +7,8 @@ The extension auto-detects your test framework, runs it, and uploads the
 results. Use **Moodle Submit: Run Tests (No Submit)** if you just want a local
 run.
 
-Per-project assignment keys live in a `.moodle-submit.json` file at the project
-root:
+Each project's assignment key lives in a `.moodle-submit.json` file at the
+project root. If it's missing, you'll be asked for the key before the tests run:
 
 ```json
 {

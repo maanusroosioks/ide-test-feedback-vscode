@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  getAssignmentKeySetting,
   getAuthScopes,
   getPreferredAdapterId,
   getRequestTimeoutMs,
@@ -8,7 +7,6 @@ import {
   getSourceCaptureSettings,
   getTestCommandOverrides,
   getWarnOnSuspiciousTests,
-  setAssignmentKey,
   setServiceUrl,
 } from '../../../src/config/settings';
 import {
@@ -35,8 +33,7 @@ describe('settings getters', () => {
   it('fall back to defaults when nothing is set', () => {
     expect(getServiceUrl()).toBe('');
     expect(getRequestTimeoutMs()).toBe(15000);
-    expect(getAssignmentKeySetting()).toBeUndefined();
-    expect(getAuthScopes()).toEqual([]);
+    expect(getAuthScopes()).toEqual(['User.Read']);
     expect(getTestCommandOverrides()).toEqual({});
     expect(getPreferredAdapterId()).toBeUndefined();
     expect(getWarnOnSuspiciousTests()).toBe(true);
@@ -55,14 +52,6 @@ describe('settings getters', () => {
     expect(getTestCommandOverrides()).toEqual({ pytest: 'pytest -q' });
     expect(getPreferredAdapterId()).toBe('pytest');
     expect(getWarnOnSuspiciousTests()).toBe(false);
-  });
-
-  it('trim the assignment key and treat a blank one as unset', () => {
-    configValues.set('assignmentKey', '  assignment-7  ');
-    expect(getAssignmentKeySetting()).toBe('assignment-7');
-
-    configValues.set('assignmentKey', '   ');
-    expect(getAssignmentKeySetting()).toBeUndefined();
   });
 });
 
@@ -91,23 +80,27 @@ describe('getSourceCaptureSettings', () => {
   );
 });
 
-describe('settings setters', () => {
-  it('write to the workspace when a folder is open', async () => {
+describe('getRequestTimeoutMs', () => {
+  it('clamps the timeout into its allowed range', () => {
+    configValues.set('requestTimeoutMs', 50);
+    expect(getRequestTimeoutMs()).toBe(1_000);
+
+    configValues.set('requestTimeoutMs', 10_000_000);
+    expect(getRequestTimeoutMs()).toBe(120_000);
+  });
+
+  it.each([0, -5, Number.NaN, 'soon'])('falls back to the default for %s', (value) => {
+    configValues.set('requestTimeoutMs', value);
+    expect(getRequestTimeoutMs()).toBe(15_000);
+  });
+});
+
+describe('setServiceUrl', () => {
+  it('writes to user settings even when a folder is open', async () => {
     workspace.workspaceFolders = [workspaceFolder('/work/project')];
 
     await setServiceUrl('https://bridge.example.edu');
-    await setAssignmentKey('assignment-7');
 
-    expect(configUpdate).toHaveBeenCalledWith('serviceUrl', 'https://bridge.example.edu', ConfigurationTarget.Workspace);
-    expect(configUpdate).toHaveBeenCalledWith('assignmentKey', 'assignment-7', ConfigurationTarget.Workspace);
-  });
-
-  it('write to user settings when no folder is open', async () => {
-    await setServiceUrl('https://bridge.example.edu');
     expect(configUpdate).toHaveBeenCalledWith('serviceUrl', 'https://bridge.example.edu', ConfigurationTarget.Global);
-
-    workspace.workspaceFolders = [];
-    await setAssignmentKey('assignment-7');
-    expect(configUpdate).toHaveBeenCalledWith('assignmentKey', 'assignment-7', ConfigurationTarget.Global);
   });
 });

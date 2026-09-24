@@ -4,21 +4,23 @@ function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('moodleSubmit');
 }
 
+/** Defaults live here and in package.json; a non-numeric or non-positive setting falls back to them. */
+function boundedNumber(key: string, fallback: number, min: number, max: number): number {
+  const value = config().get<number>(key, fallback);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return Math.min(Math.max(Math.floor(value), min), max);
+}
+
 export function getServiceUrl(): string {
   return config().get<string>('serviceUrl', '');
 }
 
 export function getRequestTimeoutMs(): number {
-  return config().get<number>('requestTimeoutMs', 15000);
-}
-
-export function getAssignmentKeySetting(): string | undefined {
-  const value = config().get<string>('assignmentKey', '').trim();
-  return value ? value : undefined;
+  return boundedNumber('requestTimeoutMs', 15_000, 1_000, 120_000);
 }
 
 export function getAuthScopes(): string[] {
-  return config().get<string[]>('authScopes', []);
+  return config().get<string[]>('authScopes', ['User.Read']);
 }
 
 export function getTestCommandOverrides(): Record<string, string> {
@@ -37,17 +39,10 @@ export interface SourceCaptureSettings {
 // Hard ceiling so a student can't set a huge value and use submissions to hammer the gateway.
 const MAX_TOTAL_CHARS_CEILING = 1_000_000;
 
-/** Defaults live here and in package.json; a non-numeric or absurd setting falls back to them. */
-function charLimit(key: string, fallback: number, ceiling: number): number {
-  const value = config().get<number>(key, fallback);
-  if (!Number.isFinite(value) || value <= 0) return fallback;
-  return Math.min(Math.floor(value), ceiling);
-}
-
 export function getSourceCaptureSettings(): SourceCaptureSettings {
   return {
     captureSource: config().get<boolean>('submitTestSource', true),
-    maxTotalChars: charLimit('maxTotalSourceChars', 500_000, MAX_TOTAL_CHARS_CEILING),
+    maxTotalChars: boundedNumber('maxTotalSourceChars', 500_000, 1, MAX_TOTAL_CHARS_CEILING),
   };
 }
 
@@ -55,16 +50,7 @@ export function getWarnOnSuspiciousTests(): boolean {
   return config().get<boolean>('warnOnSuspiciousTests', true);
 }
 
-function writeTarget(): vscode.ConfigurationTarget {
-  return (vscode.workspace.workspaceFolders?.length ?? 0) > 0
-    ? vscode.ConfigurationTarget.Workspace
-    : vscode.ConfigurationTarget.Global;
-}
-
+/** Machine-scoped, so VS Code only accepts it in user settings. */
 export async function setServiceUrl(value: string): Promise<void> {
-  await config().update('serviceUrl', value, writeTarget());
-}
-
-export async function setAssignmentKey(value: string): Promise<void> {
-  await config().update('assignmentKey', value, writeTarget());
+  await config().update('serviceUrl', value, vscode.ConfigurationTarget.Global);
 }

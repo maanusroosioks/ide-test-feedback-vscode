@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Moodle Test Submit project file",
+  "description": "Identifies which Moodle assignment this project submits to.",
+  "type": "object",
+  "properties": {
+    "assignmentKey": {
+      "type": "string",
+      "description": "Key of the Moodle assignment this project submits to, as given by your instructor.",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "patternErrorMessage": "The assignment key may only contain letters, digits, '_' and '-'."
+    },
+    "projectName": {
+      "type": "string",
+      "description": "Name shown for this project in Moodle. Defaults to the workspace folder name.",
+      "maxLength": 255
+    }
+  },
+  "required": ["assignmentKey"],
+  "additionalProperties": false
+}

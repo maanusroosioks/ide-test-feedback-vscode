@@ -12,7 +12,9 @@ describe('ALL_ADAPTERS', () => {
   });
 
   it('matches the preferredAdapter setting offered in package.json', () => {
-    const setting = packageJson.contributes.configuration.properties['moodleSubmit.preferredAdapter'];
+    const sections: Array<{ properties: Record<string, { enum?: string[] }> }> = packageJson.contributes.configuration;
+    const setting = sections.find((section) => 'moodleSubmit.preferredAdapter' in section.properties)!
+      .properties['moodleSubmit.preferredAdapter'];
     expect(setting.enum).toEqual(ALL_ADAPTERS.map((adapter) => adapter.id));
   });
 });
