@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-import { defineAdapter } from './define';
-import { anyExists, pathExists } from '../util/shell';
-import { junitReportDirs } from './reports';
+import { defineAdapter } from '../../runner/define';
+import { anyExists, pathExists } from '../../util/shell';
+import { junitReportDirs } from '../../runner/reports';
 
 /** Matched as a path suffix: a multi-project build writes one per subproject. */
 const REPORT_DIR = 'build/test-results/test';

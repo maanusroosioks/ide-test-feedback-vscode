@@ -2,7 +2,7 @@ import { readdir } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { pathExists } from '../util/shell';
 import type { Platform } from '../core/types';
-import { PLATFORMS, type PlatformProfile, type StackFrame } from '../languages';
+import { PLATFORMS, type PlatformProfile, type StackFrame } from '../ecosystems';
 
 export type { StackFrame };
 

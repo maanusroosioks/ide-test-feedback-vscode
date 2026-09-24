@@ -13,7 +13,7 @@
   },
   "overrides": [
     {
-      "files": ["src/core/**", "src/source/**", "src/capture/**", "src/adapters/**", "src/util/**"],
+      "files": ["src/core/**", "src/scanning/**", "src/runner/**", "src/ecosystems/**", "src/capture/**", "src/util/**"],
       "rules": {
         "no-restricted-imports": [
           "error",

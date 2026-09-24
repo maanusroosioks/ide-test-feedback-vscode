@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { AdapterRegistry } from '../adapters/registry';
+import type { AdapterRegistry } from '../runner/registry';
 import type { AuthService } from '../auth/authService';
 import {
   getAssignmentKeySetting,

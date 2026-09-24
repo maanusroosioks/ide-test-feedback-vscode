@@ -2,8 +2,8 @@
 // Computed over files the student owns, so they were never trustworthy as evidence; the grader
 // gets the test source instead.
 
-import { SOURCE_LANGUAGES, type SourceLanguage, type SourceLanguageProfile } from '../languages';
-import { maskWith, type TestDeclaration } from '../source';
+import { SOURCE_LANGUAGES, type SourceLanguage, type SourceLanguageProfile } from '../ecosystems';
+import { maskWith, type TestDeclaration } from '../scanning';
 
 export interface TestIntegrity {
   /** Whether a declaration for this result was found in the project's source. */

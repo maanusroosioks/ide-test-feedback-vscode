@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AdapterRegistry } from '../../../src/adapters/registry';
-import type { AdapterRunResult, RunOptions, TestRunnerAdapter } from '../../../src/adapters/types';
+import { AdapterRegistry } from '../../../src/runner/registry';
+import type { AdapterRunResult, RunOptions, TestRunnerAdapter } from '../../../src/runner/types';
 import { NoTestResultsError, runTests } from '../../../src/core/testRunner';
 import type { NormalizedTestCase } from '../../../src/core/types';
 import { configValues, resetVscodeStub } from '../helpers/vscodeStub';

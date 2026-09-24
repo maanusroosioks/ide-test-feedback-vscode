@@ -14,7 +14,7 @@ import {
   type TestSourceKind,
 } from '../../../src/capture/evidence';
 import { describeSuspiciousTests } from '../../../src/capture/integrity';
-import { sliceLines } from '../../../src/source';
+import { sliceLines } from '../../../src/scanning';
 import type { NormalizedTestCase, NormalizedTestRun, Platform } from '../../../src/core/types';
 
 const EXAMPLES = resolve('c:/Moodle/examples');

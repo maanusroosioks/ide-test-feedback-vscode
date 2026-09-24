@@ -1,14 +1,17 @@
-// Everything language-specific lives in a profile here. Adding a language means adding its
-// profiles to these two maps; the compiler rejects a union member left without one.
+// The one door into ecosystem knowledge: the rest of the extension imports from here, never from an
+// ecosystem's own files. Adding an ecosystem means adding its folder and one entry in ECOSYSTEMS;
+// the compiler rejects a Platform or SourceLanguage left without a profile.
 
 import type { Platform } from '../core/types';
-import { maskWith, type TestDeclaration } from '../source';
-import { csharpSource, dotnetPlatform } from './dotnet';
-import { javaSource, jvmPlatform, kotlinSource } from './jvm';
-import { pythonPlatform, pythonSource } from './python';
-import type { PlatformProfile, SourceLanguage, SourceLanguageProfile } from './types';
+import type { TestRunnerAdapter } from '../runner/types';
+import { maskWith, type TestDeclaration } from '../scanning';
+import { dotnetEcosystem } from './dotnet';
+import { jvmEcosystem } from './jvm';
+import { pythonEcosystem } from './python';
+import type { Ecosystem, PlatformProfile, SourceLanguage, SourceLanguageProfile } from './types';
 
 export type {
+  Ecosystem,
   PlatformProfile,
   SourceLanguage,
   SourceLanguageProfile,
@@ -16,17 +19,31 @@ export type {
   StackFrameRule,
 } from './types';
 
-export const SOURCE_LANGUAGES: Record<SourceLanguage, SourceLanguageProfile> = {
-  python: pythonSource,
-  java: javaSource,
-  kotlin: kotlinSource,
-  csharp: csharpSource,
+/** In adapter detection priority order. */
+export const ECOSYSTEMS: Record<Platform, Ecosystem> = {
+  jvm: jvmEcosystem,
+  python: pythonEcosystem,
+  dotnet: dotnetEcosystem,
 };
 
+/**
+ * The first match wins when there is no picker. Each id must also be listed in
+ * `moodleSubmit.preferredAdapter`'s enum in package.json — a unit test checks that.
+ */
+export const ALL_ADAPTERS: readonly TestRunnerAdapter[] = Object.values(ECOSYSTEMS).flatMap(
+  (ecosystem) => ecosystem.adapters,
+);
+
 export const PLATFORMS: Record<Platform, PlatformProfile> = {
-  jvm: jvmPlatform,
-  python: pythonPlatform,
-  dotnet: dotnetPlatform,
+  jvm: jvmEcosystem.platform,
+  python: pythonEcosystem.platform,
+  dotnet: dotnetEcosystem.platform,
+};
+
+export const SOURCE_LANGUAGES: Record<SourceLanguage, SourceLanguageProfile> = {
+  ...jvmEcosystem.languages,
+  ...pythonEcosystem.languages,
+  ...dotnetEcosystem.languages,
 };
 
 const LANGUAGE_BY_EXTENSION = new Map<string, SourceLanguage>(

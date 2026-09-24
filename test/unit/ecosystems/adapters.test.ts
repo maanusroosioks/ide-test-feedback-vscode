@@ -2,10 +2,10 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { dotnetTestAdapter } from '../../../src/adapters/dotnet-test';
-import { gradleJunitAdapter } from '../../../src/adapters/gradle-junit';
-import { mavenJunitAdapter } from '../../../src/adapters/maven-junit';
-import { pytestAdapter } from '../../../src/adapters/pytest';
+import { dotnetTestAdapter } from '../../../src/ecosystems/dotnet/dotnet-test';
+import { gradleJunitAdapter } from '../../../src/ecosystems/jvm/gradle-junit';
+import { mavenJunitAdapter } from '../../../src/ecosystems/jvm/maven-junit';
+import { pytestAdapter } from '../../../src/ecosystems/python/pytest';
 import { pathExists, runCommand, type RunCommandOptions } from '../../../src/util/shell';
 
 // The real build tools aren't installed in CI; each test plays the tool by writing the report

@@ -8,8 +8,8 @@ import {
   parseJUnitXml,
   parseJUnitXmlDirectory,
   parseJUnitXmlFile,
-} from '../../../../src/adapters/parsers/junit-xml-parser';
-import { ReportUnavailableError } from '../../../../src/adapters/parsers/report-file';
+} from '../../../../src/runner/parsers/junit-xml-parser';
+import { ReportUnavailableError } from '../../../../src/runner/parsers/report-file';
 
 const FIXTURES_DIR = join(__dirname, '../../fixtures/junit');
 

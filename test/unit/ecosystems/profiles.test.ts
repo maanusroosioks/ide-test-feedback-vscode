@@ -1,7 +1,5 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PLATFORMS, SOURCE_LANGUAGES } from '../../../src/languages';
+import { PLATFORMS, SOURCE_LANGUAGES } from '../../../src/ecosystems';
 
 const sourceProfiles = Object.entries(SOURCE_LANGUAGES);
 const platformProfiles = Object.entries(PLATFORMS);
@@ -47,14 +45,6 @@ describe('language profiles', () => {
     for (const [, profile] of sourceProfiles) {
       expect(profile.assertions.global).toBe(true);
       for (const pattern of profile.noopPatterns) expect(pattern.global).toBe(true);
-    }
-  });
-
-  it('keeps src/source independent of the language profiles, which configure it', () => {
-    const sourceDir = join(__dirname, '../../../src/source');
-    for (const file of readdirSync(sourceDir)) {
-      const text = readFileSync(join(sourceDir, file), 'utf8');
-      expect(text, `${file} imports ../languages`).not.toMatch(/from '\.\.\/languages/);
     }
   });
 });

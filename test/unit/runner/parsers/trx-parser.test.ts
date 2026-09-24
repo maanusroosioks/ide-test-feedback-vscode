@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseTrx, parseTrxFile } from '../../../../src/adapters/parsers/trx-parser';
-import { ReportUnavailableError } from '../../../../src/adapters/parsers/report-file';
+import { parseTrx, parseTrxFile } from '../../../../src/runner/parsers/trx-parser';
+import { ReportUnavailableError } from '../../../../src/runner/parsers/report-file';
 
 describe('parseTrx', () => {
   it('parses a .trx report, mapping outcomes and joining test names to their class via TestDefinitions', async () => {

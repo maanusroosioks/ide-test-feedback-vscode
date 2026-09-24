@@ -1,8 +1,8 @@
 import { readdir } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
-import { defineAdapter } from './define';
-import { parseTrxFile } from './parsers/trx-parser';
-import { tempFileReport } from './reports';
+import { defineAdapter } from '../../runner/define';
+import { parseTrxFile } from '../../runner/parsers/trx-parser';
+import { tempFileReport } from '../../runner/reports';
 
 const PROJECT_EXTENSIONS = ['.csproj', '.sln'];
 

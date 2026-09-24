@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { AdapterRegistry } from './adapters/registry';
-import { ALL_ADAPTERS } from './adapters';
+import { AdapterRegistry } from './runner/registry';
+import { ALL_ADAPTERS } from './ecosystems';
 import { AuthService } from './auth/authService';
 import { MoodleApiClient } from './services/moodleApiClient';
 import { getAuthScopes, getRequestTimeoutMs, getServiceUrl } from './config/settings';

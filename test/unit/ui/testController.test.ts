@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AdapterRegistry } from '../../../src/adapters/registry';
+import type { AdapterRegistry } from '../../../src/runner/registry';
 import type { AuthService } from '../../../src/auth/authService';
 import { collectTestEvidence } from '../../../src/capture/evidence';
 import { CancelledError } from '../../../src/core/errors';

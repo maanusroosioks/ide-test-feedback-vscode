@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { TestRunnerAdapter } from '../adapters/types';
+import type { TestRunnerAdapter } from '../runner/types';
 import { MoodleSubmitError } from '../core/errors';
 
 export class NoWorkspaceFolderError extends MoodleSubmitError {

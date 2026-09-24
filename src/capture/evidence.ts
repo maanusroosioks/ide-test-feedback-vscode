@@ -7,8 +7,8 @@ import {
   type TestIntegrity,
   type TestIntegrityEntry,
 } from './integrity';
-import { languageForFile, scanTestDeclarations, type SourceLanguage } from '../languages';
-import { matchDeclaration, type TestDeclaration } from '../source';
+import { languageForFile, scanTestDeclarations, type SourceLanguage } from '../ecosystems';
+import { matchDeclaration, type TestDeclaration } from '../scanning';
 import type { NormalizedTestRun } from '../core/types';
 import { REQUEST_LIMITS } from '../services/httpTypes';
 

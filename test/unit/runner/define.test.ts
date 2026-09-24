@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defineAdapter, type PreparedRun } from '../../../src/adapters/define';
+import { defineAdapter, type PreparedRun } from '../../../src/runner/define';
 import { CancelledError } from '../../../src/core/errors';
 
 const NOOP_COMMAND = 'node --version';

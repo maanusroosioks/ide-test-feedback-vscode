@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { languageForFile, maskCommentsAndStrings } from '../../../src/languages';
-import { sliceLines, type TestDeclaration } from '../../../src/source';
+import { languageForFile, maskCommentsAndStrings } from '../../../src/ecosystems';
+import { sliceLines, type TestDeclaration } from '../../../src/scanning';
 import { declarationNamed as find, fixture, scan } from '../helpers/sourceFixtures';
 
 function names(declarations: TestDeclaration[]): string[] {

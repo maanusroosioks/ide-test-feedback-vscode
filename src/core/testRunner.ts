@@ -1,5 +1,5 @@
-import type { AdapterRegistry, ResolveAdapterOptions } from '../adapters/registry';
-import type { TestRunnerAdapter } from '../adapters/types';
+import type { AdapterRegistry, ResolveAdapterOptions } from '../runner/registry';
+import type { TestRunnerAdapter } from '../runner/types';
 import type { NormalizedTestRun } from './types';
 import { getPreferredAdapterId, getTestCommandOverrides } from '../config/settings';
 import { MoodleSubmitError } from './errors';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AdapterRegistry, NoAdapterFoundError } from '../../../src/adapters/registry';
-import type { TestRunnerAdapter } from '../../../src/adapters/types';
+import { AdapterRegistry, NoAdapterFoundError } from '../../../src/runner/registry';
+import type { TestRunnerAdapter } from '../../../src/runner/types';
 
 function fakeAdapter(id: string, matches: boolean): TestRunnerAdapter {
   return {

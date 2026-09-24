@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchDeclaration, normalizeTestName } from '../../../src/source';
+import { matchDeclaration, normalizeTestName } from '../../../src/scanning';
 import { declarations } from '../helpers/sourceFixtures';
 
 const { python, java, kotlin, csharp } = declarations;

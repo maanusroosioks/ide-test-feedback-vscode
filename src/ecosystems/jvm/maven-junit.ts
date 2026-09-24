@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-import { defineAdapter } from './define';
-import { pathExists } from '../util/shell';
-import { junitReportDirs } from './reports';
+import { defineAdapter } from '../../runner/define';
+import { pathExists } from '../../util/shell';
+import { junitReportDirs } from '../../runner/reports';
 
 /** One per module in a reactor build, under `<module>/target/`. */
 const REPORT_DIR = 'surefire-reports';

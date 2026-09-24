@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { TestRunnerAdapter } from '../../../src/adapters/types';
+import type { TestRunnerAdapter } from '../../../src/runner/types';
 import { MoodleSubmitError } from '../../../src/core/errors';
 import {
   NoWorkspaceFolderError,

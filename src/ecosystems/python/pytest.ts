@@ -1,7 +1,7 @@
-import { defineAdapter } from './define';
-import { anyExists } from '../util/shell';
-import { parseJUnitXmlFile } from './parsers/junit-xml-parser';
-import { tempFileReport } from './reports';
+import { defineAdapter } from '../../runner/define';
+import { anyExists } from '../../util/shell';
+import { parseJUnitXmlFile } from '../../runner/parsers/junit-xml-parser';
+import { tempFileReport } from '../../runner/reports';
 
 const DETECT_FILES = ['pytest.ini', 'pyproject.toml', 'setup.cfg', 'conftest.py'];
 

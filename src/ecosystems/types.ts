@@ -1,4 +1,11 @@
-import type { LexicalRules, TestDeclaration } from '../source';
+// An ecosystem is a runtime and its toolchain (the JVM, .NET, Python). It owns:
+//  - adapters: the build tools that run its tests and report the results;
+//  - a platform profile: what its stack traces look like and where its sources live;
+//  - source languages: the syntaxes it hosts and the test conventions written in them.
+// Ecosystems hold configuration only; the engines they configure are in `../runner` and `../scanning`.
+
+import type { TestRunnerAdapter } from '../runner/types';
+import type { LexicalRules, TestDeclaration } from '../scanning';
 
 export type SourceLanguage = 'python' | 'java' | 'kotlin' | 'csharp';
 
@@ -42,4 +49,11 @@ export interface PlatformProfile {
   /** Relative to the project or one of its modules, probed in order; `''` is the directory itself. */
   sourceRoots: string[];
   stackFrames: StackFrameRule[];
+}
+
+export interface Ecosystem {
+  platform: PlatformProfile;
+  languages: Partial<Record<SourceLanguage, SourceLanguageProfile>>;
+  /** In detection priority order. */
+  adapters: TestRunnerAdapter[];
 }
