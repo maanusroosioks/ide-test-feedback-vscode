@@ -48,6 +48,13 @@ export interface PlatformProfile {
   sourceExtensions: string[];
   /** Relative to the project or one of its modules, probed in order; `''` is the directory itself. */
   sourceRoots: string[];
+  /**
+   * Where the file declaring a test suite or a stack frame's class may be: relative to a source
+   * root, forward slashes, no extension. Probed in order.
+   */
+  sourcePaths(qualifiedName: string): string[];
+  /** Build output and environments not to search for modules, on top of the ones every platform shares. */
+  ignoredDirs: string[];
   stackFrames: StackFrameRule[];
 }
 

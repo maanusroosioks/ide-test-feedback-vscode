@@ -15,19 +15,8 @@ export interface SourceLocation {
 export type ExistsFn = (path: string) => Promise<boolean>;
 export type ListDirsFn = (path: string) => Promise<string[]>;
 
-const IGNORED_DIRS = new Set([
-  'node_modules',
-  'target',
-  'build',
-  'bin',
-  'obj',
-  'out',
-  'dist',
-  'venv',
-  '.venv',
-  '__pycache__',
-  'site-packages',
-]);
+/** Every platform's; each profile adds its own. Hidden folders are skipped too. */
+const SHARED_IGNORED_DIRS = ['node_modules', 'dist', 'out'];
 
 function hasDirectorySegment(file: string): boolean {
   return file.includes('/') || file.includes('\\');
@@ -72,9 +61,7 @@ function classMatchesSuite(className: string | undefined, suite: string | undefi
 async function defaultListDirs(path: string): Promise<string[]> {
   try {
     const entries = await readdir(path, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.') && !IGNORED_DIRS.has(entry.name))
-      .map((entry) => entry.name);
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
   } catch {
     return [];
   }
@@ -160,29 +147,16 @@ export class TestLocationResolver {
     const candidates: string[] = [];
     if (frame.className) {
       const extension = frame.file.slice(frame.file.lastIndexOf('.'));
-      candidates.push(`${this.packagePath(frame.className)}${extension}`);
+      candidates.push(...this.profile.sourcePaths(frame.className).map((path) => `${path}${extension}`));
     }
     candidates.push(frame.file);
     return this.probe(candidates);
   }
 
-  /** `com.pkg.FooTest$Inner` -> `com/pkg/FooTest`. */
-  private packagePath(className: string): string {
-    return className.split('$')[0].split('.').join('/');
-  }
-
   private suiteCandidates(testSuite: string): string[] {
-    const extensions = this.profile.sourceExtensions;
-    const candidates = extensions.map((ext) => `${this.packagePath(testSuite)}${ext}`);
-
-    const segments = testSuite.split('$')[0].split('.');
-    if (segments.length > 1 && /^[A-Z]/.test(segments[segments.length - 1])) {
-      // pytest: `tests.test_math.TestMath` -> file is the module, not the class.
-      const withoutClass = segments.slice(0, -1).join('/');
-      candidates.push(...extensions.map((ext) => `${withoutClass}${ext}`));
-      candidates.push(...extensions.map((ext) => `${segments[segments.length - 1]}${ext}`));
-    }
-    return candidates;
+    return this.profile
+      .sourcePaths(testSuite)
+      .flatMap((path) => this.profile.sourceExtensions.map((ext) => `${path}${ext}`));
   }
 
   private async probe(relatives: string[]): Promise<string | undefined> {
@@ -206,7 +180,10 @@ export class TestLocationResolver {
   }
 
   private async moduleDirs(): Promise<string[]> {
-    this.modules ??= this.listDirs(this.folderPath);
+    this.modules ??= this.listDirs(this.folderPath).then((dirs) => {
+      const ignored = new Set([...SHARED_IGNORED_DIRS, ...this.profile.ignoredDirs]);
+      return dirs.filter((name) => !name.startsWith('.') && !ignored.has(name));
+    });
     return this.modules;
   }
 

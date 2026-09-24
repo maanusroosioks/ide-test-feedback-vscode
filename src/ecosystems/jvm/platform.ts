@@ -11,6 +11,14 @@ function className(qualified: string): string | undefined {
   return lastDot > 0 ? afterModule.slice(0, lastDot) : undefined;
 }
 
+/** `com.pkg.FooTest$Inner` lives in `com/pkg/FooTest`, or just `FooTest` where folders don't follow packages. */
+function sourcePaths(qualifiedName: string): string[] {
+  const segments = qualifiedName.split('$')[0].split('.');
+  const paths = [segments.join('/')];
+  if (segments.length > 1) paths.push(segments[segments.length - 1]);
+  return paths;
+}
+
 export const jvmPlatform: PlatformProfile = {
   defaultSourceLanguage: 'java',
   sourceExtensions: SOURCE_EXTENSIONS,
@@ -24,6 +32,9 @@ export const jvmPlatform: PlatformProfile = {
     'src',
     '',
   ],
+  sourcePaths,
+  // Maven, Gradle, Eclipse.
+  ignoredDirs: ['target', 'build', 'bin'],
   stackFrames: [
     {
       pattern: FRAME,

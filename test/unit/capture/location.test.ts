@@ -158,6 +158,21 @@ describe('resolveTestLocation', () => {
     });
   });
 
+  it('finds a .NET suite by its class name when folders do not follow namespaces', async () => {
+    const resolver = resolverFor('dotnet', ['src/CalculatorTests.cs']);
+
+    expect(await resolver.resolveSuiteFile('Acme.Math.CalculatorTests')).toBe(resolve(ROOT, 'src/CalculatorTests.cs'));
+  });
+
+  it("skips only the platform's own build output when searching modules", async () => {
+    const files = ['bin/src/test/java/com/pkg/FooTest.java', 'obj/src/test/java/com/pkg/FooTest.java'];
+
+    // `bin` is Eclipse's output on the JVM, but `obj` means nothing there.
+    expect(await resolverFor('jvm', files, ['bin', 'obj']).resolveSuiteFile('com.pkg.FooTest')).toBe(
+      resolve(ROOT, 'obj/src/test/java/com/pkg/FooTest.java'),
+    );
+  });
+
   it('returns nothing when the suite has no matching file on disk', async () => {
     const resolver = resolverFor('jvm', []);
 
