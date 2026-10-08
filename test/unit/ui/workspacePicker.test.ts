@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import type { TestRunnerAdapter } from '../../../src/runner/types';
+import { describe, expect, it } from 'vitest';
 import { MoodleSubmitError } from '../../../src/core/errors';
 import {
   NoWorkspaceFolderError,
@@ -7,16 +6,13 @@ import {
   pickWorkspaceFolder,
   resolveWorkspaceFolder,
 } from '../../../src/ui/workspacePicker';
-import { Uri, resetVscodeStub, window, workspace, workspaceFolder } from '../helpers/vscodeStub';
+import { stubAdapter } from '../helpers/fakes';
+import { Uri, window, workspace, workspaceFolder } from '../helpers/vscodeStub';
 
 const api = workspaceFolder('/work/api', 'api', 0);
 const web = workspaceFolder('/work/web', 'web', 1);
 
 type FolderPick = { label: string; description: string; folder: typeof api };
-
-beforeEach(() => {
-  resetVscodeStub();
-});
 
 describe('pickWorkspaceFolder', () => {
   it('returns undefined when no folder is open', async () => {
@@ -89,15 +85,7 @@ describe('resolveWorkspaceFolder', () => {
 });
 
 describe('pickAdapter', () => {
-  const adapter = (id: string): TestRunnerAdapter => ({
-    id,
-    displayName: `Display ${id}`,
-    platform: 'jvm',
-    detect: async () => true,
-    run: async () => {
-      throw new Error('not used');
-    },
-  });
+  const adapter = (id: string) => stubAdapter(id, { displayName: `Display ${id}` });
 
   it('offers each candidate by display name and returns the chosen one', async () => {
     const maven = adapter('maven');

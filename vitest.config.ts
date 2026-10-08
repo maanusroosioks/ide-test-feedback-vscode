@@ -10,5 +10,8 @@ export default defineConfig({
   },
   test: {
     include: ['test/unit/**/*.test.ts'],
+    setupFiles: ['test/unit/setup.ts'],
+    unstubGlobals: true,
+    unstubEnvs: true,
   },
 });

@@ -1,10 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { withProgress } from '../../../src/ui/progress';
-import { ProgressLocation, progress, resetVscodeStub, window } from '../helpers/vscodeStub';
-
-beforeEach(() => {
-  resetVscodeStub();
-});
+import { ProgressLocation, progress, window } from '../helpers/vscodeStub';
 
 describe('withProgress', () => {
   it('shows a cancellable notification and returns the task result', async () => {

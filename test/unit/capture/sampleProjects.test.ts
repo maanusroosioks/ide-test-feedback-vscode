@@ -1,34 +1,22 @@
 // End-to-end over the real sample projects: real filesystem, real resolver, no mocks.
-// Skipped when the samples aren't checked out beside the extension (e.g. on CI).
+// Skipped when the samples aren't checked out (e.g. on CI). They're looked for in MOODLE_EXAMPLES_DIR,
+// else in the `examples` folder two levels above this repository.
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildTestRunRequest } from '../../../src/core/payload';
 import { TestLocationResolver } from '../../../src/capture/location';
-import {
-  collectTestEvidence,
-  type DeclaredSource,
-  type FileSource,
-  type TestEvidence,
-  type TestSourceKind,
-} from '../../../src/capture/evidence';
+import { collectTestEvidence, type TestEvidence } from '../../../src/capture/evidence';
 import { describeSuspiciousTests } from '../../../src/capture/integrity';
 import { sliceLines } from '../../../src/scanning';
 import type { NormalizedTestCase, NormalizedTestRun, Platform } from '../../../src/core/types';
+import { declaredAt, filePathOf, kindsOf } from '../helpers/evidence';
+import { testRun } from '../helpers/fakes';
 
-const EXAMPLES = resolve('c:/Moodle/examples');
+const EXAMPLES = process.env.MOODLE_EXAMPLES_DIR ?? resolve(__dirname, '../../../../../examples');
 
 const metadata = { assignmentKey: 'sample-assignment', projectName: 'sample' };
-
-/** Every arm's fields as optional, so assertions needn't narrow on `kind` first. */
-type AnySource = Partial<Omit<DeclaredSource, 'kind'> & Omit<FileSource, 'kind'>> & {
-  kind: TestSourceKind;
-};
-
-function sourcesOf(evidence: TestEvidence): AnySource[] {
-  return evidence.payload.sources as AnySource[];
-}
 
 async function evidenceFor(folder: string, run: NormalizedTestRun): Promise<TestEvidence> {
   return collectTestEvidence(run, new TestLocationResolver(folder, run.platform), {
@@ -38,21 +26,16 @@ async function evidenceFor(folder: string, run: NormalizedTestRun): Promise<Test
   });
 }
 
-function run(
-  adapterId: string,
-  platform: Platform,
-  results: NormalizedTestCase[],
-): NormalizedTestRun {
-  return { adapterId, platform, startedAt: 1000, finishedAt: 2000, results };
+function run(adapterId: string, platform: Platform, results: NormalizedTestCase[]): NormalizedTestRun {
+  return testRun(results, { adapterId, platform });
 }
 
 /** Reads a test back the way the grader has to: slice it out of its file. */
 function codeFor(evidence: TestEvidence, index: number): string {
-  const source = sourcesOf(evidence)[index];
-  expect(source.kind).toBe('TEST');
+  const source = declaredAt(evidence, index);
   const file = evidence.payload.files.find((candidate) => candidate.path === source.filePath);
   expect(file?.truncated).toBeUndefined();
-  return sliceLines(file?.content as string, source.startLine as number, source.endLine as number);
+  return sliceLines(file?.content ?? '', source.startLine, source.endLine);
 }
 
 function located(evidence: TestEvidence): number {
@@ -83,10 +66,8 @@ describe.skipIf(!existsSync(pythonSample))('python-sample', () => {
     const evidence = await evidenceFor(pythonSample, testRun);
 
     expect(located(evidence)).toBe(5);
-    expect(sourcesOf(evidence).every((source) => source.kind === 'TEST')).toBe(true);
-    expect(
-      sourcesOf(evidence).every((source) => source.filePath === 'test_calculator.py'),
-    ).toBe(true);
+    expect(new Set(kindsOf(evidence))).toEqual(new Set(['TEST']));
+    expect(new Set(evidence.payload.sources.map(filePathOf))).toEqual(new Set(['test_calculator.py']));
   });
 
   it('maps both parametrized ids onto the same declaration, decorator included', async () => {
@@ -94,7 +75,7 @@ describe.skipIf(!existsSync(pythonSample))('python-sample', () => {
 
     expect(codeFor(evidence, 1)).toContain('@pytest.mark.parametrize');
     expect(codeFor(evidence, 1)).toContain('assert divide(a, b) == expected');
-    expect(sourcesOf(evidence)[1].startLine).toBe(sourcesOf(evidence)[2].startLine);
+    expect(declaredAt(evidence, 1).startLine).toBe(declaredAt(evidence, 2).startLine);
     expect(codeFor(evidence, 1)).not.toContain('def test_divide_by_zero_raises');
   });
 
@@ -102,7 +83,9 @@ describe.skipIf(!existsSync(pythonSample))('python-sample', () => {
     const evidence = await evidenceFor(pythonSample, testRun);
 
     expect(describeSuspiciousTests(evidence.integrity)).toEqual([]);
-    expect(evidence.integrity.every((entry) => (entry.integrity.assertionCount ?? 0) > 0)).toBe(true);
+    for (const entry of evidence.integrity) {
+      expect(entry.integrity.assertionCount, entry.testName).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -128,9 +111,7 @@ describe.skipIf(!existsSync(mavenSample) || !existsSync(gradleSample))('java sam
     const evidence = await evidenceFor(folder, testRun);
 
     expect(located(evidence)).toBe(3);
-    expect(sourcesOf(evidence)[0].filePath).toBe(
-      'src/test/java/com/example/calculator/CalculatorTest.java',
-    );
+    expect(declaredAt(evidence, 0).filePath).toBe('src/test/java/com/example/calculator/CalculatorTest.java');
     expect(codeFor(evidence, 0)).toContain('assertEquals(5, Calculator.add(2, 3));');
     expect(codeFor(evidence, 1)).toContain('@ParameterizedTest');
     expect(codeFor(evidence, 1)).toContain('@CsvSource({"10, 2, 5", "9, 3, 3"})');
@@ -154,7 +135,7 @@ describe.skipIf(!existsSync(dotnetSample))('dotnet-sample', () => {
     const evidence = await evidenceFor(dotnetSample, testRun);
 
     expect(located(evidence)).toBe(3);
-    expect(sourcesOf(evidence)[0].filePath).toBe('CalculatorTests.cs');
+    expect(declaredAt(evidence, 0).filePath).toBe('CalculatorTests.cs');
     expect(codeFor(evidence, 1)).toContain('[Theory]');
     expect(codeFor(evidence, 1)).toContain('[InlineData(10, 2, 5)]');
     expect(codeFor(evidence, 1)).toContain('[InlineData(9, 3, 3)]');
@@ -166,11 +147,8 @@ describe.skipIf(!existsSync(dotnetSample))('dotnet-sample', () => {
 
     // Sanitized for Moodle PARAM_TEXT, but the captured code must survive verbatim.
     expect(request.testFiles?.[0].content).toContain('Assert.Throws<DivideByZeroException>');
-    expect(request.results[2].source).toEqual({
-      path: 'CalculatorTests.cs',
-      startLine: (evidence.payload.sources[2] as DeclaredSource).startLine,
-      endLine: (evidence.payload.sources[2] as DeclaredSource).endLine,
-    });
+    const { startLine, endLine } = declaredAt(evidence, 2);
+    expect(request.results[2].source).toEqual({ path: 'CalculatorTests.cs', startLine, endLine });
     expect(request).not.toHaveProperty('integrity');
   });
 });

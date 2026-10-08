@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '../../../src/auth/authService';
-import { authentication, resetVscodeStub, window } from '../helpers/vscodeStub';
+import { authentication, window } from '../helpers/vscodeStub';
 
 const SCOPES = ['User.Read'];
 
 let service: AuthService;
 
 beforeEach(() => {
-  resetVscodeStub();
   service = new AuthService(() => SCOPES);
 });
 

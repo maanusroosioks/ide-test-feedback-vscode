@@ -3,6 +3,7 @@ import { buildTestRunRequest, InvalidPayloadError } from '../../../src/core/payl
 import type { NormalizedTestRun } from '../../../src/core/types';
 import type { SubmissionMetadata } from '../../../src/core/submissionMetadata';
 import type { DeclaredSource, TestEvidencePayload } from '../../../src/capture/evidence';
+import { testRun } from '../helpers/fakes';
 
 const metadata: SubmissionMetadata = {
   assignmentKey: 'assignment-101',
@@ -12,12 +13,8 @@ const metadata: SubmissionMetadata = {
 };
 
 function sampleRun(overrides: Partial<NormalizedTestRun> = {}): NormalizedTestRun {
-  return {
-    adapterId: 'pytest',
-    platform: 'python',
-    startedAt: 1000,
-    finishedAt: 2000,
-    results: [
+  return testRun(
+    [
       { testSuite: 'test_calculator', testName: 'test_adds', status: 'PASSED', durationMs: 5 },
       {
         testSuite: 'test_calculator',
@@ -28,8 +25,8 @@ function sampleRun(overrides: Partial<NormalizedTestRun> = {}): NormalizedTestRu
         stackTrace: 'Traceback ...',
       },
     ],
-    ...overrides,
-  };
+    overrides,
+  );
 }
 
 describe('buildTestRunRequest', () => {
@@ -45,7 +42,7 @@ describe('buildTestRunRequest', () => {
       startedAtMs: 1000,
       finishedAtMs: 2000,
       results: [
-        { testSuite: 'test_calculator', testName: 'test_adds', status: 'PASSED', durationMs: 5, message: undefined },
+        { testSuite: 'test_calculator', testName: 'test_adds', status: 'PASSED', durationMs: 5 },
         {
           testSuite: 'test_calculator',
           testName: 'test_divides_by_zero',
@@ -73,6 +70,12 @@ describe('buildTestRunRequest', () => {
       status: 'PASSED' as const,
     }));
     expect(() => buildTestRunRequest(sampleRun({ results }), metadata)).toThrow(InvalidPayloadError);
+  });
+
+  it('throws InvalidPayloadError for a result with a blank test name', () => {
+    const run = sampleRun({ results: [{ testSuite: 'test_calculator', testName: '   ', status: 'PASSED' }] });
+
+    expect(() => buildTestRunRequest(run, metadata)).toThrow('Encountered a test result with a blank testName.');
   });
 
   it.each([
@@ -208,7 +211,6 @@ describe('buildTestRunRequest — captured source', () => {
       {
         path: 'tests/test_calculator.py',
         content: 'import pytest\n\ndef test_adds():\n    assert add(2, 3) == 5\n',
-        truncated: undefined,
       },
     ]);
   });
@@ -256,12 +258,6 @@ describe('buildTestRunRequest — captured source', () => {
 });
 
 describe('InvalidPayloadError', () => {
-  it('rejects a result with a blank test name', () => {
-    const run = sampleRun({ results: [{ testSuite: 'test_calculator', testName: '   ', status: 'PASSED' }] });
-
-    expect(() => buildTestRunRequest(run, metadata)).toThrow('Encountered a test result with a blank testName.');
-  });
-
   it('prefixes its message for the user', () => {
     expect(new InvalidPayloadError('too many results').userMessage).toBe('Invalid submission: too many results');
   });

@@ -1,17 +1,20 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as vscode from 'vscode';
 import type { AdapterRegistry } from '../../../src/runner/registry';
 import type { AuthService } from '../../../src/auth/authService';
 import { collectTestEvidence } from '../../../src/capture/evidence';
 import { CancelledError } from '../../../src/core/errors';
+import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/submissionMetadata';
 import { submitRun } from '../../../src/core/submitRun';
 import { runTests, type RunTestsOptions } from '../../../src/core/testRunner';
 import type { NormalizedTestCase } from '../../../src/core/types';
 import type { MoodleApiClient } from '../../../src/services/moodleApiClient';
 import { registerTestController, type PerformRunOptions } from '../../../src/ui/testController';
 import type { KnownTest } from '../../../src/ui/testTree';
+import { fakeStatus, recordingLogger, testRun, writeWorkspaceConfig, type RecordingLogger } from '../helpers/fakes';
+import { tempDir, writeTree } from '../helpers/fs';
 import {
   TestMessage,
   TestRunProfileKind,
@@ -19,7 +22,6 @@ import {
   asContext,
   configValues,
   fakeExtensionContext,
-  resetVscodeStub,
   tests,
   window,
   workspace,
@@ -54,34 +56,32 @@ def test_emptied():
 let folderPath: string;
 let testFile: string;
 let context: FakeExtensionContext;
-let logged: string[];
+let logger: RecordingLogger;
 
 beforeEach(async () => {
-  resetVscodeStub();
   vi.mocked(runTests).mockReset();
   vi.mocked(submitRun).mockReset();
   vi.mocked(collectTestEvidence).mockClear();
 
-  folderPath = await mkdtemp(join(tmpdir(), 'moodle-controller-'));
+  folderPath = await tempDir();
   testFile = join(folderPath, 'tests', 'test_math.py');
-  await mkdir(join(folderPath, 'tests'));
-  await writeFile(testFile, TEST_FILE, 'utf8');
-  await writeFile(join(folderPath, '.moodle-submit.json'), '{ "assignmentKey": "assignment-7" }', 'utf8');
+  await writeTree(folderPath, { 'tests/test_math.py': TEST_FILE });
+  await writeWorkspaceConfig(folderPath, { assignmentKey: 'assignment-7' });
   workspace.workspaceFolders = [workspaceFolder(folderPath, 'calculator')];
   configValues.set('serviceUrl', 'https://bridge.example.edu');
 
   context = fakeExtensionContext();
-  logged = [];
+  logger = recordingLogger();
 });
 
 function setup() {
-  const status = { running: vi.fn(), result: vi.fn(), error: vi.fn(), idle: vi.fn() };
+  const status = fakeStatus();
   const authService = { getAccessToken: vi.fn(async () => 'token-abc') };
   const control = registerTestController(asContext(context), {
     registry: {} as AdapterRegistry,
     authService: authService as unknown as AuthService,
     apiClient: {} as MoodleApiClient,
-    logger: { log: (message) => void logged.push(message) },
+    logger,
     status,
   });
   const controller = tests.createTestController.mock.results[0].value as FakeTestController;
@@ -95,7 +95,7 @@ function testsRan(results: NormalizedTestCase[], onRun?: (options: RunTestsOptio
     const skipped = results.filter((r) => r.status === 'SKIPPED').length;
     const passed = results.filter((r) => r.status === 'PASSED').length;
     return {
-      run: { adapterId: 'pytest', platform: 'python', startedAt: 1, finishedAt: 2, results },
+      run: testRun(results),
       summary: { total: results.length, passed, failed, skipped },
     };
   });
@@ -167,7 +167,7 @@ describe('registerTestController — tree', () => {
   it('follows workspace folders being added and removed', async () => {
     const { controller } = setup();
     const onFoldersChanged = workspace.onDidChangeWorkspaceFolders.mock.calls[0][0];
-    const other = await mkdtemp(join(tmpdir(), 'moodle-controller-other-'));
+    const other = await tempDir();
 
     workspace.workspaceFolders = [workspaceFolder(other, 'other')];
     onFoldersChanged();
@@ -266,11 +266,10 @@ describe('performRun — results', () => {
     await performRun(control);
     expect(testNode(controller, 'test_it', suite)?.uri).toBeUndefined();
 
-    const newFile = join(folderPath, 'tests', 'test_new.py');
-    await writeFile(newFile, 'def test_it():\n    assert True\n', 'utf8');
+    await writeTree(folderPath, { 'tests/test_new.py': 'def test_it():\n    assert True\n' });
     await performRun(control);
 
-    expect(testNode(controller, 'test_it', suite)?.uri?.fsPath).toBe(newFile);
+    expect(testNode(controller, 'test_it', suite)?.uri?.fsPath).toBe(join(folderPath, 'tests', 'test_new.py'));
     expect(suiteNode(controller, suite)?.children.size).toBe(1);
   });
 
@@ -310,7 +309,7 @@ describe('performRun — results', () => {
     expect(status.running).toHaveBeenCalledOnce();
     expect(status.result).toHaveBeenCalledWith({ total: 1, passed: 1, failed: 0, skipped: 0 });
     expect(report.mock.calls).toEqual([['Running tests…']]);
-    expect(logged).toContain('Run complete (not submitted).');
+    expect(logger.messages).toContain('Run complete (not submitted).');
     expect(authService.getAccessToken).not.toHaveBeenCalled();
     expect(submitRun).not.toHaveBeenCalled();
   });
@@ -320,7 +319,7 @@ describe('performRun — results', () => {
     testsRan(PASSING);
     const request = new TestRunRequest();
 
-    await performRun(control, { request: request as never });
+    await performRun(control, { request: request as unknown as vscode.TestRunRequest });
 
     expect(controller.runs[0].request).toBe(request);
   });
@@ -405,7 +404,7 @@ describe('performRun — submitting', () => {
   });
 
   it('asks for a missing assignment key before running, and stops if the user backs out', async () => {
-    await rm(join(folderPath, '.moodle-submit.json'));
+    await rm(join(folderPath, WORKSPACE_CONFIG_FILE_NAME));
     const { control, controller } = setup();
 
     await performRun(control, { submit: true });
@@ -419,7 +418,7 @@ describe('performRun — submitting', () => {
   });
 
   it('saves a key entered at the prompt and goes on to run', async () => {
-    await rm(join(folderPath, '.moodle-submit.json'));
+    await rm(join(folderPath, WORKSPACE_CONFIG_FILE_NAME));
     window.showWarningMessage.mockResolvedValueOnce('Add key');
     window.showInputBox.mockResolvedValueOnce(' assignment-9 ');
     const { control } = setup();
@@ -427,14 +426,14 @@ describe('performRun — submitting', () => {
 
     await performRun(control, { submit: true });
 
-    expect(JSON.parse(await readFile(join(folderPath, '.moodle-submit.json'), 'utf8'))).toEqual({
+    expect(JSON.parse(await readFile(join(folderPath, WORKSPACE_CONFIG_FILE_NAME), 'utf8'))).toEqual({
       assignmentKey: 'assignment-9',
     });
     expect(submitRun).toHaveBeenCalledOnce();
   });
 
   it('does not ask for a key when only running', async () => {
-    await rm(join(folderPath, '.moodle-submit.json'));
+    await rm(join(folderPath, WORKSPACE_CONFIG_FILE_NAME));
     const { control } = setup();
     testsRan(PASSING);
 
@@ -463,8 +462,8 @@ describe('performRun — submitting', () => {
     ]);
     expect(submitContext.evidence?.files[0].content).toBe(TEST_FILE);
 
-    expect(logged).toContain('Located 1/1 tests in 1 file(s) (' + TEST_FILE.length + ' chars).');
-    expect(logged).toContain('Submitted successfully.');
+    expect(logger.messages).toContain('Located 1/1 tests in 1 file(s) (' + TEST_FILE.length + ' chars).');
+    expect(logger.messages).toContain('Submitted successfully.');
     expect(controller.runs[0].output).toBe('\r\nSubmitted 1 test result(s) to Moodle.\r\n');
     expect(window.showInformationMessage).toHaveBeenCalledWith('Submitted 1 test result(s) to Moodle (1 passed).');
   });
@@ -485,7 +484,7 @@ describe('performRun — submitting', () => {
 
     await performRun(control, { submit: true });
 
-    expect(logged).toContain('Integrity warning: tests.test_math.test_emptied — has an empty body');
+    expect(logger.messages).toContain('Integrity warning: tests.test_math.test_emptied — has an empty body');
     expect(window.showWarningMessage.mock.calls[0][0]).toBe(
       '1 of 2 tests look like they may have been emptied or disabled.',
     );
@@ -499,7 +498,7 @@ describe('performRun — submitting', () => {
     await performRun(control, { submit: true });
 
     expect(submitRun).not.toHaveBeenCalled();
-    expect(logged).toContain('Submission cancelled at the integrity warning.');
+    expect(logger.messages).toContain('Submission cancelled at the integrity warning.');
     expect(controller.runs[0].output).toBe('\r\nSubmission cancelled.\r\n');
     expect(controller.runs[0].ended).toBe(true);
   });
@@ -512,7 +511,7 @@ describe('performRun — submitting', () => {
     await performRun(control, { submit: true });
 
     expect(window.showWarningMessage).not.toHaveBeenCalled();
-    expect(logged.some((m) => m.startsWith('Integrity warning:'))).toBe(true);
+    expect(logger.messages).toContainEqual(expect.stringMatching(/^Integrity warning:/));
     expect(submitRun).toHaveBeenCalledOnce();
   });
 
@@ -523,7 +522,7 @@ describe('performRun — submitting', () => {
 
     await performRun(control, { submit: true });
 
-    expect(logged).toContain('Could not capture test source: disk on fire');
+    expect(logger.messages).toContain('Could not capture test source: disk on fire');
     expect(vi.mocked(submitRun).mock.calls[0][1].evidence).toBeUndefined();
   });
 
@@ -562,7 +561,7 @@ describe('run profile and folderFor', () => {
   }
 
   it('runs the folder that owns the requested item', async () => {
-    const other = workspaceFolder(await mkdtemp(join(tmpdir(), 'moodle-controller-other-')), 'other');
+    const other = workspaceFolder(await tempDir(), 'other');
     const calculator = workspaceFolder(folderPath, 'calculator', 1);
     workspace.workspaceFolders = [other, calculator];
     const { control, controller } = setup();

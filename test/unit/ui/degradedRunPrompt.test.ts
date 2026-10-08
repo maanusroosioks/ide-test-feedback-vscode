@@ -1,15 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { SuspiciousTest } from '../../../src/capture/integrity';
 import { confirmDegradedRun, describeFinding } from '../../../src/ui/degradedRunPrompt';
-import { resetVscodeStub, window } from '../helpers/vscodeStub';
+import { window } from '../helpers/vscodeStub';
 
 function finding(testName: string, testSuite?: string): SuspiciousTest {
   return { testSuite, testName, reasons: ['has an empty body'] };
 }
-
-beforeEach(() => {
-  resetVscodeStub();
-});
 
 describe('describeFinding', () => {
   it('qualifies the test with its suite and joins the reasons', () => {

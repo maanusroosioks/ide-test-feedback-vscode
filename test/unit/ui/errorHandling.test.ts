@@ -1,19 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { CancelledError, MoodleSubmitError } from '../../../src/core/errors';
 import { HttpError } from '../../../src/services/errors';
 import { handleCommandError } from '../../../src/ui/errorHandling';
-import { commands, resetVscodeStub, window } from '../helpers/vscodeStub';
+import { fakeStatus, recordingLogger, type RecordingLogger } from '../helpers/fakes';
+import { commands, window } from '../helpers/vscodeStub';
 
-function fakeStatus() {
-  return { running: vi.fn(), result: vi.fn(), error: vi.fn(), idle: vi.fn() };
+/** Lets the `.then` on the popup's promise run, so a test can see what it did or didn't do. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
-let logged: string[];
-const logger = { log: (message: string) => void logged.push(message) };
+let logger: RecordingLogger;
 
 beforeEach(() => {
-  resetVscodeStub();
-  logged = [];
+  logger = recordingLogger();
 });
 
 describe('handleCommandError', () => {
@@ -22,7 +22,7 @@ describe('handleCommandError', () => {
 
     handleCommandError(new CancelledError(), logger, status);
 
-    expect(logged).toEqual(['Run cancelled.']);
+    expect(logger.messages).toEqual(['Run cancelled.']);
     expect(status.idle).toHaveBeenCalledOnce();
     expect(status.error).not.toHaveBeenCalled();
     expect(window.showErrorMessage).not.toHaveBeenCalled();
@@ -34,7 +34,7 @@ describe('handleCommandError', () => {
     handleCommandError(new HttpError(503, 'maintenance'), logger, status);
 
     const message = 'Submission service returned 503: maintenance';
-    expect(logged).toEqual([`Error: ${message}`]);
+    expect(logger.messages).toEqual([`Error: ${message}`]);
     expect(status.error).toHaveBeenCalledWith(message);
     expect(window.showErrorMessage).toHaveBeenCalledWith(message, 'Show Output');
   });
@@ -52,12 +52,14 @@ describe('handleCommandError', () => {
 
     handleCommandError(new MoodleSubmitError('bad'), logger, fakeStatus());
 
-    await vi.waitFor(() => expect(commands.executeCommand).toHaveBeenCalledWith('moodleSubmit.showOutput'));
+    await settle();
+
+    expect(commands.executeCommand).toHaveBeenCalledWith('moodleSubmit.showOutput');
   });
 
   it('does nothing more when the popup is dismissed', async () => {
     handleCommandError(new MoodleSubmitError('bad'), logger, fakeStatus());
-    await Promise.resolve();
+    await settle();
 
     expect(commands.executeCommand).not.toHaveBeenCalled();
   });

@@ -1,16 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createStatusReporter } from '../../../src/ui/statusBar';
-import { resetVscodeStub, StatusBarAlignment, ThemeColor, window, type FakeStatusBarItem } from '../helpers/vscodeStub';
+import { StatusBarAlignment, ThemeColor, window, type FakeStatusBarItem } from '../helpers/vscodeStub';
 
 function createReporter() {
   const reporter = createStatusReporter();
   const item = window.createStatusBarItem.mock.results[0].value as FakeStatusBarItem;
   return { reporter, item };
 }
-
-beforeEach(() => {
-  resetVscodeStub();
-});
 
 describe('createStatusReporter', () => {
   it('shows an idle item on the left that opens the log', () => {

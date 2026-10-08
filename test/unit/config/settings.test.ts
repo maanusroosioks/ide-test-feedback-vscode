@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   getAuthScopes,
   getPreferredAdapterId,
@@ -13,14 +13,9 @@ import {
   ConfigurationTarget,
   configUpdate,
   configValues,
-  resetVscodeStub,
   workspace,
   workspaceFolder,
 } from '../helpers/vscodeStub';
-
-beforeEach(() => {
-  resetVscodeStub();
-});
 
 describe('settings getters', () => {
   it('read from the moodleSubmit section', () => {

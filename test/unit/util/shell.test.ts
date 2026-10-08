@@ -1,14 +1,15 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CancelledError } from '../../../src/core/errors';
 import { anyExists, cleanupReport, pathExists, runCommand, tempReportPath } from '../../../src/util/shell';
+import { tempDir, writeTree } from '../helpers/fs';
 
 describe('anyExists', () => {
   it('is true when at least one of the names is present', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'any-exists-'));
-    await writeFile(join(dir, 'build.gradle.kts'), '', 'utf8');
+    const dir = await tempDir();
+    await writeTree(dir, { 'build.gradle.kts': '' });
 
     expect(await anyExists(dir, ['build.gradle', 'build.gradle.kts'])).toBe(true);
     expect(await anyExists(dir, ['pom.xml', 'pytest.ini'])).toBe(false);
@@ -17,6 +18,17 @@ describe('anyExists', () => {
 });
 
 describe('cleanupReport', () => {
+  let sandbox: string;
+  let fakeTmp: string;
+
+  // A regressed guard deletes recursively, so the temp dir it guards must be one we can lose.
+  beforeEach(async () => {
+    sandbox = await tempDir();
+    fakeTmp = join(sandbox, 'tmp');
+    await mkdir(fakeTmp);
+    for (const name of ['TMPDIR', 'TMP', 'TEMP']) vi.stubEnv(name, fakeTmp);
+  });
+
   it('removes a report it created under the temp directory', async () => {
     const path = tempReportPath('test', 'xml');
     await writeFile(path, '<testsuites/>', 'utf8');
@@ -26,19 +38,17 @@ describe('cleanupReport', () => {
   });
 
   it('refuses paths outside the temp directory, including a same-prefix sibling', async () => {
-    // `<tmp>2` shares a string prefix with `<tmp>` but is not inside it.
-    const sibling = `${resolve(tmpdir())}2`;
-    await mkdir(sibling, { recursive: true });
-    const path = join(sibling, 'not-ours.xml');
-    await writeFile(path, 'keep me', 'utf8');
+    // `<tmp>-sibling` shares a string prefix with `<tmp>` but is not inside it.
+    await writeTree(sandbox, { 'tmp-sibling/not-ours.xml': 'keep me' });
+    const path = join(sandbox, 'tmp-sibling', 'not-ours.xml');
 
     await cleanupReport(path);
     expect(await pathExists(path)).toBe(true);
   });
 
   it('refuses the temp directory itself', async () => {
-    await cleanupReport(tmpdir());
-    expect(await pathExists(tmpdir())).toBe(true);
+    await cleanupReport(fakeTmp);
+    expect(await pathExists(fakeTmp)).toBe(true);
   });
 });
 
@@ -70,7 +80,7 @@ describe('runCommand', () => {
   });
 
   it('runs in the given working directory', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'run-command-'));
+    const dir = await tempDir();
 
     const { stdout } = await runCommand(node('process.stdout.write(process.cwd())'), { cwd: dir });
 
@@ -97,6 +107,7 @@ describe('runCommand', () => {
     setTimeout(() => controller.abort(), 100);
 
     await expect(run).rejects.toBeInstanceOf(CancelledError);
-    expect(Date.now() - started).toBeLessThan(10_000);
+    // Well inside the 5s test timeout, which would otherwise fire first and hide a slow kill.
+    expect(Date.now() - started).toBeLessThan(3_000);
   });
 });

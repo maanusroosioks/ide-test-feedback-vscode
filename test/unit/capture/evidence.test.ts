@@ -1,41 +1,20 @@
-import { readFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TestLocationResolver } from '../../../src/capture/location';
-import {
-  collectTestEvidence,
-  type CaptureOptions,
-  type DeclaredSource,
-  type FileSource,
-  type TestEvidence,
-  type TestSourceKind,
-} from '../../../src/capture/evidence';
+import { collectTestEvidence, type CaptureOptions, type TestEvidence } from '../../../src/capture/evidence';
 import { describeSuspiciousTests } from '../../../src/capture/integrity';
 import { sliceLines } from '../../../src/scanning';
-import type { NormalizedTestCase, NormalizedTestRun, Platform } from '../../../src/core/types';
+import type { NormalizedTestCase, NormalizedTestRun } from '../../../src/core/types';
+import { declaredAt, filePathOf, kindsOf } from '../helpers/evidence';
+import { testRun as run } from '../helpers/fakes';
+import { fixture } from '../helpers/sourceFixtures';
 
 const FOLDER = resolve('/project');
-const PYTHON_SOURCE = readFileSync(
-  join(__dirname, '../fixtures/source/python/test_calculator.py'),
-  'utf8',
-);
+const PYTHON_SOURCE = fixture('python/test_calculator.py');
 
 interface Harness {
   evidence: TestEvidence;
   reads: string[];
-}
-
-/** Every arm's fields as optional, so assertions needn't narrow on `kind` first. */
-type AnySource = Partial<Omit<DeclaredSource, 'kind'> & Omit<FileSource, 'kind'>> & {
-  kind: TestSourceKind;
-};
-
-function sourcesOf(evidence: TestEvidence): AnySource[] {
-  return evidence.payload.sources as AnySource[];
-}
-
-function run(results: NormalizedTestCase[], platform: Platform = 'python'): NormalizedTestRun {
-  return { adapterId: 'pytest', platform, startedAt: 1000, finishedAt: 2000, results };
 }
 
 async function collect(
@@ -71,6 +50,10 @@ async function collect(
 
 const PYTHON_FILES = { 'test_calculator.py': PYTHON_SOURCE };
 
+function locatedFlags(evidence: TestEvidence): boolean[] {
+  return evidence.integrity.map((entry) => entry.integrity.located);
+}
+
 describe('collectTestEvidence — source capture', () => {
   it('locates just the matched test, decorator included', async () => {
     const { evidence } = await collect(
@@ -84,13 +67,12 @@ describe('collectTestEvidence — source capture', () => {
       PYTHON_FILES,
     );
 
-    const source = sourcesOf(evidence)[0];
-    expect(source.kind).toBe('TEST');
+    const source = declaredAt(evidence, 0);
     expect(source.filePath).toBe('test_calculator.py');
-    expect(source.startLine).toBeLessThan(source.endLine as number);
+    expect(source.startLine).toBeLessThan(source.endLine);
     expect(evidence.payload.files[0].content).toBe(PYTHON_SOURCE);
 
-    const sliced = sliceLines(PYTHON_SOURCE, source.startLine as number, source.endLine as number);
+    const sliced = sliceLines(PYTHON_SOURCE, source.startLine, source.endLine);
     expect(sliced).toContain('@pytest.mark.parametrize');
     expect(sliced).toContain('assert divide(a, b) == expected');
     expect(sliced).not.toContain('def test_uses_a_nested_helper');
@@ -102,7 +84,7 @@ describe('collectTestEvidence — source capture', () => {
       PYTHON_FILES,
     );
 
-    expect(sourcesOf(evidence)[0]).toEqual({ kind: 'FILE', filePath: 'test_calculator.py' });
+    expect(evidence.payload.sources[0]).toEqual({ kind: 'FILE', filePath: 'test_calculator.py' });
     expect(evidence.integrity[0].integrity).toEqual({ located: false });
     expect(evidence.payload.files[0].content).toBe(PYTHON_SOURCE);
   });
@@ -116,7 +98,7 @@ describe('collectTestEvidence — source capture', () => {
     }));
     const { evidence } = await collect(run(unmatched), PYTHON_FILES);
 
-    expect(sourcesOf(evidence).every((source) => source.kind === 'FILE')).toBe(true);
+    expect(new Set(kindsOf(evidence))).toEqual(new Set(['FILE']));
     expect(evidence.payload.files).toHaveLength(1);
 
     const serialized = JSON.stringify(evidence);
@@ -130,7 +112,7 @@ describe('collectTestEvidence — source capture', () => {
       PYTHON_FILES,
     );
 
-    expect(sourcesOf(evidence)[0]).toEqual({ kind: 'NONE' });
+    expect(evidence.payload.sources[0]).toEqual({ kind: 'NONE' });
     expect(evidence.integrity[0].integrity.located).toBe(false);
   });
 
@@ -158,9 +140,7 @@ describe('collectTestEvidence — source capture', () => {
 
     expect(evidence.payload.files).toEqual([{ path: 'test_calculator.py', content: PYTHON_SOURCE }]);
     // filePath is the join key from a result back into files.
-    for (const source of sourcesOf(evidence)) {
-      expect(source.filePath).toBe(evidence.payload.files[0].path);
-    }
+    expect(evidence.payload.sources.map(filePathOf)).toEqual(['test_calculator.py', 'test_calculator.py']);
   });
 
   it('lists no more files than the gateway accepts', async () => {
@@ -176,11 +156,12 @@ describe('collectTestEvidence — source capture', () => {
 
     expect(evidence.payload.files).toHaveLength(200);
     const listed = new Set(evidence.payload.files.map((file) => file.path));
-    const sources = sourcesOf(evidence);
-    expect(sources.filter((source) => source.kind === 'TEST')).toHaveLength(200);
-    expect(sources.filter((source) => source.kind === 'NONE')).toHaveLength(5);
+    const kinds = kindsOf(evidence);
+    expect(kinds.filter((kind) => kind === 'TEST')).toHaveLength(200);
+    expect(kinds.filter((kind) => kind === 'NONE')).toHaveLength(5);
     // A source must never point at a file that was left out of the payload.
-    expect(sources.every((source) => source.kind === 'NONE' || listed.has(source.filePath as string))).toBe(true);
+    const pointedAt = evidence.payload.sources.map(filePathOf).filter((path) => path !== undefined);
+    expect(pointedAt.filter((path) => !listed.has(path))).toEqual([]);
   });
 });
 
@@ -191,7 +172,7 @@ describe('collectTestEvidence — paths must not leak the student', () => {
       { [join('tests', 'test_calculator.py')]: PYTHON_SOURCE },
     );
 
-    expect(sourcesOf(evidence)[0].filePath).toBe('tests/test_calculator.py');
+    expect(filePathOf(evidence.payload.sources[0])).toBe('tests/test_calculator.py');
   });
 
   it('degrades to the basename for a file outside the workspace folder', async () => {
@@ -205,20 +186,11 @@ describe('collectTestEvidence — paths must not leak the student', () => {
       },
     ]);
 
-    const resolver = new TestLocationResolver(FOLDER, 'python', {
-      exists: async (path) => resolve(path) === outside,
-      listDirs: async () => [],
-    });
-    const evidence = await collectTestEvidence(testRun, resolver, {
-      folderPath: FOLDER,
-      captureSource: true,
-      maxTotalChars: 200000,
-      readFile: async () => 'def test_x():\n    assert True\n',
-    });
+    const { evidence } = await collect(testRun, { [outside]: 'def test_x():\n    assert True\n' });
 
-    expect(sourcesOf(evidence)[0].filePath).toBe('test_outside.py');
-    expect(sourcesOf(evidence)[0].filePath).not.toContain(sep);
-    expect(relative(FOLDER, outside).startsWith('..')).toBe(true);
+    expect(filePathOf(evidence.payload.sources[0])).toBe('test_outside.py');
+    expect(filePathOf(evidence.payload.sources[0])).not.toContain(sep);
+    expect(relative(FOLDER, outside)).toMatch(/^\.\./);
   });
 });
 
@@ -238,8 +210,8 @@ describe('collectTestEvidence — budget and opt-out', () => {
     expect(file.content).toContain('more characters]');
     expect(file.content).not.toContain('assert "{" + "}" == "{}"');
 
-    expect(sourcesOf(evidence).every((source) => source.kind === 'TEST')).toBe(true);
-    expect(evidence.integrity.every((entry) => entry.integrity.located)).toBe(true);
+    expect(kindsOf(evidence)).toEqual(['TEST', 'TEST', 'TEST']);
+    expect(locatedFlags(evidence)).toEqual([true, true, true]);
   });
 
   it('sends the files the budget no longer covers without content', async () => {
@@ -259,13 +231,13 @@ describe('collectTestEvidence — budget and opt-out', () => {
       { path: 'test_a.py', content: body('test_a') },
       { path: 'test_b.py' },
     ]);
-    expect(sourcesOf(evidence)[1]).toMatchObject({ kind: 'TEST', filePath: 'test_b.py' });
+    expect(evidence.payload.sources[1]).toMatchObject({ kind: 'TEST', filePath: 'test_b.py' });
   });
 
   it('reads each test off its file rather than sending its body separately', async () => {
     const { evidence } = await collect(three, PYTHON_FILES);
 
-    expect(sourcesOf(evidence).every((source) => source.kind === 'TEST')).toBe(true);
+    expect(kindsOf(evidence)).toEqual(['TEST', 'TEST', 'TEST']);
     expect(evidence.payload.files[0].content).toBe(PYTHON_SOURCE);
 
     const serialized = JSON.stringify(evidence.payload);
@@ -275,14 +247,13 @@ describe('collectTestEvidence — budget and opt-out', () => {
   it('opting out of source still submits where each test was found', async () => {
     const { evidence } = await collect(three, PYTHON_FILES, { captureSource: false });
 
-    for (const source of sourcesOf(evidence)) {
-      expect(source.kind).toBe('TEST');
-      expect(source.startLine).toBeGreaterThan(0);
+    for (const index of [0, 1, 2]) {
+      expect(declaredAt(evidence, index).startLine).toBeGreaterThan(0);
     }
     expect(evidence.payload.files).toEqual([{ path: 'test_calculator.py' }]);
-    expect(evidence.integrity.every((entry) => entry.integrity.located)).toBe(true);
+    expect(locatedFlags(evidence)).toEqual([true, true, true]);
     expect(evidence.payload.captureDisabled).toBe(true);
-    expect(evidence.integrity.filter((entry) => entry.integrity.empty).length).toBe(1);
+    expect(evidence.integrity.filter((entry) => entry.integrity.empty)).toHaveLength(1);
   });
 
   it('keeps the truncation notice inside the budget it reports against', async () => {

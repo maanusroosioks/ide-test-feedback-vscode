@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { AuthService } from '../../../src/auth/authService';
 import { registerConfigureAssignmentCommand } from '../../../src/commands/configureAssignment';
+import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/submissionMetadata';
 import { pathExists } from '../../../src/util/shell';
+import { tempDir } from '../helpers/fs';
 import {
   ConfigurationTarget,
   asContext,
@@ -13,7 +14,6 @@ import {
   configValues,
   fakeExtensionContext,
   invokeCommand,
-  resetVscodeStub,
   window,
   workspace,
   workspaceFolder,
@@ -48,15 +48,10 @@ let authService: { isSignedIn: Mock<() => Promise<boolean>> };
 let fetchMock: Mock;
 
 beforeEach(() => {
-  resetVscodeStub();
   authService = { isSignedIn: vi.fn(async () => true) };
   fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
   vi.stubGlobal('fetch', fetchMock);
   registerConfigureAssignmentCommand(asContext(fakeExtensionContext()), authService as unknown as AuthService);
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
 });
 
 describe('configureAssignment command', () => {
@@ -161,7 +156,7 @@ describe('configureAssignment command', () => {
 
     await invokeCommand(COMMAND);
 
-    expect(messagesShown(window.showInformationMessage).some((m) => m.includes('Sign in'))).toBe(false);
+    expect(messagesShown(window.showInformationMessage)).not.toContainEqual(expect.stringContaining('Sign in'));
   });
 });
 
@@ -170,8 +165,8 @@ describe('configureAssignment command — assignment key', () => {
   let target: string;
 
   beforeEach(async () => {
-    folderPath = await mkdtemp(join(tmpdir(), 'moodle-configure-'));
-    target = join(folderPath, '.moodle-submit.json');
+    folderPath = await tempDir();
+    target = join(folderPath, WORKSPACE_CONFIG_FILE_NAME);
     workspace.workspaceFolders = [workspaceFolder(folderPath, 'calculator')];
   });
 

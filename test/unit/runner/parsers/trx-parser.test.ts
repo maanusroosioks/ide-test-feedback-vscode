@@ -1,13 +1,11 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseTrx, parseTrxFile } from '../../../../src/runner/parsers/trx-parser';
 import { ReportUnavailableError } from '../../../../src/runner/parsers/report-file';
+import { fixturePath, readFixture } from '../../helpers/project';
 
 describe('parseTrx', () => {
-  it('parses a .trx report, mapping outcomes and joining test names to their class via TestDefinitions', async () => {
-    const xml = await readFile(join(__dirname, '../../fixtures/dotnet/sample-results.trx'), 'utf8');
-    const results = parseTrx(xml);
+  it('parses a .trx report, mapping outcomes and joining test names to their class via TestDefinitions', () => {
+    const results = parseTrx(readFixture('dotnet/sample-results.trx'));
 
     expect(results).toHaveLength(3);
 
@@ -55,11 +53,11 @@ describe('parseTrx — edge cases', () => {
 
 describe('parseTrxFile', () => {
   it('reads and parses a report from disk', async () => {
-    const results = await parseTrxFile(join(__dirname, '../../fixtures/dotnet/sample-results.trx'));
+    const results = await parseTrxFile(fixturePath('dotnet/sample-results.trx'));
     expect(results).toHaveLength(3);
   });
 
   it('reports a missing file as an unavailable report', async () => {
-    await expect(parseTrxFile(join(__dirname, 'missing.trx'))).rejects.toBeInstanceOf(ReportUnavailableError);
+    await expect(parseTrxFile(fixturePath('dotnet/missing.trx'))).rejects.toBeInstanceOf(ReportUnavailableError);
   });
 });

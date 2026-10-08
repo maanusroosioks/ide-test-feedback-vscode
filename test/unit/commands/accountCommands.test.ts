@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AuthService } from '../../../src/auth/authService';
 import { registerLoginCommand } from '../../../src/commands/login';
 import { registerLogoutCommand } from '../../../src/commands/logout';
@@ -8,7 +8,6 @@ import {
   asContext,
   fakeExtensionContext,
   invokeCommand,
-  resetVscodeStub,
   window,
 } from '../helpers/vscodeStub';
 
@@ -19,10 +18,6 @@ function fakeAuth() {
 function asAuth(auth: ReturnType<typeof fakeAuth>): AuthService {
   return auth as unknown as AuthService;
 }
-
-beforeEach(() => {
-  resetVscodeStub();
-});
 
 describe('login command', () => {
   it('signs in and confirms it', async () => {

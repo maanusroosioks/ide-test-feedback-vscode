@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TestLocationResolver, parseStackFrames } from '../../../src/capture/location';
 import type { Platform } from '../../../src/core/types';
+import { tempDir, writeTree } from '../helpers/fs';
 
 const ROOT = resolve('/work/proj');
 
@@ -204,9 +204,7 @@ describe('resolveTestLocation', () => {
 
     expect(probes).toBe(afterFirst);
   });
-});
 
-describe('TestLocationResolver — relative frame paths', () => {
   it('finds a path-qualified frame inside a module when it is not at the root', async () => {
     const resolver = resolverFor('python', ['backend/tests/test_math.py'], ['backend']);
 
@@ -219,11 +217,8 @@ describe('TestLocationResolver — relative frame paths', () => {
 
 describe('TestLocationResolver — real filesystem', () => {
   async function project(files: string[]): Promise<string> {
-    const root = await mkdtemp(join(tmpdir(), 'location-'));
-    for (const file of files) {
-      await mkdir(dirname(join(root, file)), { recursive: true });
-      await writeFile(join(root, file), '', 'utf8');
-    }
+    const root = await tempDir();
+    await writeTree(root, Object.fromEntries(files.map((file) => [file, ''])));
     return root;
   }
 

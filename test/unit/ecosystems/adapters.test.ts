@@ -1,21 +1,22 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dotnetTestAdapter } from '../../../src/ecosystems/dotnet/dotnet-test';
 import { gradleJunitAdapter } from '../../../src/ecosystems/jvm/gradle-junit';
 import { mavenJunitAdapter } from '../../../src/ecosystems/jvm/maven-junit';
 import { pytestAdapter } from '../../../src/ecosystems/python/pytest';
 import { pathExists, runCommand, type RunCommandOptions } from '../../../src/util/shell';
+import { recordingLogger } from '../helpers/fakes';
+import { tempDir, writeTree } from '../helpers/fs';
+import { readFixture } from '../helpers/project';
 
-// The real build tools aren't installed in CI; each test plays the tool by writing the report
+// The real build tools needn't be installed: each test plays the tool by writing the report
 // where the real one would.
 vi.mock('../../../src/util/shell', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/util/shell')>()),
   runCommand: vi.fn(),
 }));
-
-const FIXTURES_DIR = join(__dirname, '../fixtures');
 
 const JUNIT_XML = `<?xml version="1.0"?>
 <testsuite name="com.example.CalculatorTest">
@@ -39,22 +40,17 @@ function lastCommand(): { command: string; options: RunCommandOptions } {
   return { command, options };
 }
 
-async function writeReport(dir: string, name: string, content: string): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, name), content, 'utf8');
-}
-
 let folder: string;
 
 beforeEach(async () => {
   vi.mocked(runCommand).mockReset();
-  folder = await mkdtemp(join(tmpdir(), 'moodle-adapter-'));
+  folder = await tempDir();
 });
 
 describe('mavenJunitAdapter', () => {
   it('detects a folder with a pom.xml', async () => {
     expect(await mavenJunitAdapter.detect(folder)).toBe(false);
-    await writeFile(join(folder, 'pom.xml'), '<project/>', 'utf8');
+    await writeTree(folder, { 'pom.xml': '<project/>' });
     expect(await mavenJunitAdapter.detect(folder)).toBe(true);
   });
 
@@ -76,10 +72,12 @@ describe('mavenJunitAdapter', () => {
   });
 
   it('collects surefire reports from every module of a reactor build', async () => {
-    simulateTool(async () => {
-      await writeReport(join(folder, 'core/target/surefire-reports'), 'TEST-a.xml', JUNIT_XML);
-      await writeReport(join(folder, 'app/target/surefire-reports'), 'TEST-b.xml', JUNIT_XML);
-    });
+    simulateTool(() =>
+      writeTree(folder, {
+        'core/target/surefire-reports/TEST-a.xml': JUNIT_XML,
+        'app/target/surefire-reports/TEST-b.xml': JUNIT_XML,
+      }),
+    );
 
     const result = await mavenJunitAdapter.run(folder, {});
 
@@ -91,7 +89,7 @@ describe('mavenJunitAdapter', () => {
 
   it('clears reports left by an earlier run before starting, so a skipped module cannot resurface', async () => {
     const stale = join(folder, 'old-module/target/surefire-reports');
-    await writeReport(stale, 'TEST-stale.xml', JUNIT_XML);
+    await writeTree(stale, { 'TEST-stale.xml': JUNIT_XML });
     let staleSeenByTool = true;
     simulateTool(async () => {
       staleSeenByTool = await pathExists(stale);
@@ -104,17 +102,18 @@ describe('mavenJunitAdapter', () => {
   });
 
   it('logs unreadable report files and keeps the readable ones', async () => {
-    const logged: string[] = [];
-    simulateTool(async () => {
-      const dir = join(folder, 'target/surefire-reports');
-      await writeReport(dir, 'TEST-good.xml', JUNIT_XML);
-      await writeReport(dir, 'TEST-broken.xml', 'not xml at all');
-    });
+    const logger = recordingLogger();
+    simulateTool(() =>
+      writeTree(folder, {
+        'target/surefire-reports/TEST-good.xml': JUNIT_XML,
+        'target/surefire-reports/TEST-broken.xml': 'not xml at all',
+      }),
+    );
 
-    const result = await mavenJunitAdapter.run(folder, { logger: { log: (m) => logged.push(m) } });
+    const result = await mavenJunitAdapter.run(folder, { logger });
 
     expect(result.run.results).toHaveLength(2);
-    expect(logged.join('\n')).toContain('TEST-broken.xml');
+    expect(logger.messages).toContainEqual(expect.stringContaining('TEST-broken.xml'));
   });
 });
 
@@ -124,12 +123,12 @@ describe('gradleJunitAdapter', () => {
 
   it.each(['build.gradle', 'build.gradle.kts'])('detects a folder with %s', async (buildFile) => {
     expect(await gradleJunitAdapter.detect(folder)).toBe(false);
-    await writeFile(join(folder, buildFile), '', 'utf8');
+    await writeTree(folder, { [buildFile]: '' });
     expect(await gradleJunitAdapter.detect(folder)).toBe(true);
   });
 
   it('prefers the project wrapper when there is one', async () => {
-    await writeFile(join(folder, wrapper), '', 'utf8');
+    await writeTree(folder, { [wrapper]: '' });
     simulateTool();
 
     await gradleJunitAdapter.run(folder, {});
@@ -147,7 +146,7 @@ describe('gradleJunitAdapter', () => {
 
   it('clears stale results even when an override omits cleanTest', async () => {
     const stale = join(folder, 'build/test-results/test');
-    await writeReport(stale, 'TEST-stale.xml', JUNIT_XML);
+    await writeTree(stale, { 'TEST-stale.xml': JUNIT_XML });
     let staleSeenByTool = true;
     simulateTool(async () => {
       staleSeenByTool = await pathExists(stale);
@@ -160,12 +159,14 @@ describe('gradleJunitAdapter', () => {
   });
 
   it('collects results from each subproject of a multi-project build', async () => {
-    simulateTool(async () => {
-      await writeReport(join(folder, 'lib/build/test-results/test'), 'TEST-lib.xml', JUNIT_XML);
-      await writeReport(join(folder, 'app/build/test-results/test'), 'TEST-app.xml', JUNIT_XML);
-      // Other test tasks are not what `test` ran.
-      await writeReport(join(folder, 'app/build/test-results/integrationTest'), 'TEST-it.xml', JUNIT_XML);
-    });
+    simulateTool(() =>
+      writeTree(folder, {
+        'lib/build/test-results/test/TEST-lib.xml': JUNIT_XML,
+        'app/build/test-results/test/TEST-app.xml': JUNIT_XML,
+        // Other test tasks are not what `test` ran.
+        'app/build/test-results/integrationTest/TEST-it.xml': JUNIT_XML,
+      }),
+    );
 
     const result = await gradleJunitAdapter.run(folder, {});
 
@@ -187,7 +188,7 @@ describe('pytestAdapter', () => {
     'detects a folder with %s',
     async (marker) => {
       expect(await pytestAdapter.detect(folder)).toBe(false);
-      await writeFile(join(folder, marker), '', 'utf8');
+      await writeTree(folder, { [marker]: '' });
       expect(await pytestAdapter.detect(folder)).toBe(true);
     },
   );
@@ -198,8 +199,8 @@ describe('pytestAdapter', () => {
     await pytestAdapter.run(folder, {});
 
     const { command } = lastCommand();
-    expect(command.startsWith(`${python} -m pytest --junit-xml="`)).toBe(true);
-    expect(reportPathOf(command).startsWith(tmpdir())).toBe(true);
+    expect(command).toMatch(new RegExp(`^${python} -m pytest --junit-xml="`));
+    expect(dirname(reportPathOf(command))).toBe(resolve(tmpdir()));
   });
 
   it('appends the report flag to a command override', async () => {
@@ -211,7 +212,7 @@ describe('pytestAdapter', () => {
   });
 
   it('parses the report pytest wrote and removes it on cleanup', async () => {
-    const fixture = await readFile(join(FIXTURES_DIR, 'junit/sample-pytest-junit.xml'), 'utf8');
+    const fixture = readFixture('junit/sample-pytest-junit.xml');
     let reportPath = '';
     simulateTool(async (command) => {
       reportPath = reportPathOf(command);
@@ -259,7 +260,7 @@ describe('dotnetTestAdapter', () => {
 
   it.each(['App.csproj', 'App.sln'])('detects a folder with %s', async (projectFile) => {
     expect(await dotnetTestAdapter.detect(folder)).toBe(false);
-    await writeFile(join(folder, projectFile), '', 'utf8');
+    await writeTree(folder, { [projectFile]: '' });
     expect(await dotnetTestAdapter.detect(folder)).toBe(true);
   });
 
@@ -273,9 +274,9 @@ describe('dotnetTestAdapter', () => {
     await dotnetTestAdapter.run(folder, {});
 
     const { command } = lastCommand();
-    expect(command.startsWith('dotnet test --logger "trx;LogFileName=')).toBe(true);
-    expect(trxPathOf(command).startsWith(tmpdir())).toBe(true);
-    expect(trxPathOf(command).endsWith('.trx')).toBe(true);
+    expect(command).toMatch(/^dotnet test --logger "trx;LogFileName=/);
+    expect(dirname(trxPathOf(command))).toBe(resolve(tmpdir()));
+    expect(trxPathOf(command)).toMatch(/\.trx$/);
   });
 
   it('appends the report flags to a command override', async () => {
@@ -283,11 +284,11 @@ describe('dotnetTestAdapter', () => {
 
     await dotnetTestAdapter.run(folder, { commandOverride: 'dotnet test Calc.Tests' });
 
-    expect(lastCommand().command.startsWith('dotnet test Calc.Tests --logger "trx;')).toBe(true);
+    expect(lastCommand().command).toMatch(/^dotnet test Calc\.Tests --logger "trx;/);
   });
 
   it('parses the TRX report and removes it on cleanup', async () => {
-    const fixture = await readFile(join(FIXTURES_DIR, 'dotnet/sample-results.trx'), 'utf8');
+    const fixture = readFixture('dotnet/sample-results.trx');
     let reportPath = '';
     simulateTool(async (command) => {
       reportPath = trxPathOf(command);

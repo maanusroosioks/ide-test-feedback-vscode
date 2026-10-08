@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AdapterRegistry } from '../../../src/runner/registry';
 import type { AdapterRunResult, RunOptions, TestRunnerAdapter } from '../../../src/runner/types';
 import { NoTestResultsError, runTests } from '../../../src/core/testRunner';
 import type { NormalizedTestCase } from '../../../src/core/types';
-import { configValues, resetVscodeStub } from '../helpers/vscodeStub';
+import { recordingLogger, registryWith, stubAdapter, testRun, type RecordingLogger } from '../helpers/fakes';
+import { configValues } from '../helpers/vscodeStub';
 
 interface FakeAdapterOptions {
   id?: string;
@@ -15,17 +15,16 @@ interface FakeAdapterOptions {
 }
 
 function fakeAdapter(options: FakeAdapterOptions = {}) {
+  const id = options.id ?? 'fake';
   const cleanup = vi.fn(async () => {});
   const runOptions: RunOptions[] = [];
-  const adapter: TestRunnerAdapter = {
-    id: options.id ?? 'fake',
-    displayName: `Fake ${options.id ?? 'fake'}`,
-    platform: 'python',
+  const adapter: TestRunnerAdapter = stubAdapter(id, {
+    displayName: `Fake ${id}`,
     detect: async () => options.detects ?? true,
     run: async (_folder, opts): Promise<AdapterRunResult> => {
       runOptions.push(opts);
       return {
-        run: { adapterId: 'fake', platform: 'python', startedAt: 1, finishedAt: 2, results: options.results ?? [] },
+        run: testRun(options.results ?? [], { adapterId: id }),
         stdout: 'collected 3 items',
         stderr: options.stderr ?? '',
         exitCode: options.exitCode ?? 0,
@@ -33,14 +32,8 @@ function fakeAdapter(options: FakeAdapterOptions = {}) {
         cleanup,
       };
     },
-  };
+  });
   return { adapter, cleanup, runOptions };
-}
-
-function registryWith(...adapters: TestRunnerAdapter[]): AdapterRegistry {
-  const registry = new AdapterRegistry();
-  adapters.forEach((adapter) => registry.register(adapter));
-  return registry;
 }
 
 const MIXED_RESULTS: NormalizedTestCase[] = [
@@ -51,12 +44,10 @@ const MIXED_RESULTS: NormalizedTestCase[] = [
   { testName: 'e', status: 'SKIPPED' },
 ];
 
-let logged: string[];
-const logger = { log: (message: string) => void logged.push(message) };
+let logger: RecordingLogger;
 
 beforeEach(() => {
-  resetVscodeStub();
-  logged = [];
+  logger = recordingLogger();
 });
 
 describe('runTests', () => {
@@ -67,8 +58,8 @@ describe('runTests', () => {
 
     expect(run.results).toEqual(MIXED_RESULTS);
     expect(summary).toEqual({ total: 5, passed: 2, failed: 2, skipped: 1 });
-    expect(logged).toContain('Detected adapter: Fake fake');
-    expect(logged).toContain('Parsed 5 result(s): 2 passed, 2 failed/errored, 1 skipped.');
+    expect(logger.messages).toContain('Detected adapter: Fake fake');
+    expect(logger.messages).toContain('Parsed 5 result(s): 2 passed, 2 failed/errored, 1 skipped.');
   });
 
   it("logs the tool's stdout and, when present, its stderr", async () => {
@@ -76,8 +67,8 @@ describe('runTests', () => {
 
     await runTests(registryWith(adapter), '/work', { logger });
 
-    expect(logged).toContain('collected 3 items');
-    expect(logged).toContain('DeprecationWarning');
+    expect(logger.messages).toContain('collected 3 items');
+    expect(logger.messages).toContain('DeprecationWarning');
   });
 
   it("passes the adapter's own command override, signal and output sink through", async () => {
@@ -137,7 +128,7 @@ describe('runTests', () => {
     await runTests(registryWith(first.adapter, second.adapter), '/work', { logger });
 
     expect(second.runOptions).toHaveLength(1);
-    expect(logged).toContain('Detected adapter: Fake second');
+    expect(logger.messages).toContain('Detected adapter: Fake second');
   });
 
   it("warns when the forced adapter doesn't fit the folder", async () => {
@@ -146,7 +137,9 @@ describe('runTests', () => {
 
     await runTests(registryWith(adapter), '/work', { logger });
 
-    expect(logged.some((m) => m.startsWith('Warning: moodleSubmit.preferredAdapter forces Fake fake'))).toBe(true);
-    expect(logged).not.toContain('Detected adapter: Fake fake');
+    expect(logger.messages).toContainEqual(
+      expect.stringMatching(/^Warning: moodleSubmit\.preferredAdapter forces Fake fake/),
+    );
+    expect(logger.messages).not.toContain('Detected adapter: Fake fake');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { matchDeclaration, normalizeTestName } from '../../../src/scanning';
-import { declarations } from '../helpers/sourceFixtures';
+import { declaration, declarations } from '../helpers/sourceFixtures';
 
 const { python, java, kotlin, csharp } = declarations;
 
@@ -62,35 +62,30 @@ describe('matchDeclaration', () => {
   });
 
   it('kotlin: matches a backticked name that itself ends in parentheses', () => {
-    const declaration = { name: 'divide(a, b)', container: 'T', startLine: 1, endLine: 1, markers: [], containerMarkers: [], bodyText: '' };
-    expect(matchDeclaration([declaration], 'divide(a, b)()', 'T')?.name).toBe('divide(a, b)');
+    const backticked = declaration({ name: 'divide(a, b)', container: 'T' });
+    expect(matchDeclaration([backticked], 'divide(a, b)()', 'T')?.name).toBe('divide(a, b)');
   });
 
   it('csharp: matches an xUnit display name carrying theory arguments', () => {
-    const declaration = {
+    const displayNamed = declaration({
       name: 'A',
       container: 'ÕunTests',
-      startLine: 1,
-      endLine: 1,
       markers: ['[Theory(DisplayName = "adds two")]'],
-      containerMarkers: [],
-      bodyText: '',
-    };
-    expect(matchDeclaration([declaration, { ...declaration, markers: [] }], 'adds two(x: 1)', 'Ns.ÕunTests')).toBe(
-      declaration,
-    );
+    });
+    const plain = { ...displayNamed, markers: [] };
+    expect(matchDeclaration([displayNamed, plain], 'adds two(x: 1)', 'Ns.ÕunTests')).toBe(displayNamed);
   });
 
   it('treats a suite starting with a non-ASCII capital as a type', () => {
-    const declaration = { name: 'A', container: 'ÕunTests', startLine: 1, endLine: 1, markers: [], containerMarkers: [], bodyText: '' };
-    const other = { ...declaration, container: 'Other' };
-    expect(matchDeclaration([declaration, other], 'Ns.ÕunTests.A', 'Ns.ÕunTests')).toBe(declaration);
+    const own = declaration({ name: 'A', container: 'ÕunTests' });
+    const other = { ...own, container: 'Other' };
+    expect(matchDeclaration([own, other], 'Ns.ÕunTests.A', 'Ns.ÕunTests')).toBe(own);
   });
 
   it('csharp: uses a +-separated nested suite to disambiguate', () => {
     const nested = [
-      { name: 'A', container: 'Outer.Inner', startLine: 1, endLine: 1, markers: [], containerMarkers: [], bodyText: '' },
-      { name: 'A', container: 'Outer.Other', startLine: 2, endLine: 2, markers: [], containerMarkers: [], bodyText: '' },
+      declaration({ name: 'A', container: 'Outer.Inner', startLine: 1, endLine: 1 }),
+      declaration({ name: 'A', container: 'Outer.Other', startLine: 2, endLine: 2 }),
     ];
     expect(matchDeclaration(nested, 'Ns.Outer+Other.A', 'Ns.Outer+Other')?.container).toBe('Outer.Other');
   });
@@ -100,7 +95,7 @@ describe('matchDeclaration', () => {
   });
 
   it('java: breaks an ambiguous tie with a stack-trace line when one is available', () => {
-    const inner = java.filter((declaration) => declaration.name === 'ambiguous')[1];
+    const inner = java.filter((candidate) => candidate.name === 'ambiguous')[1];
     expect(matchDeclaration(java, 'ambiguous', undefined, inner.startLine)?.container).toBe(
       'CalculatorTest.OtherCases',
     );

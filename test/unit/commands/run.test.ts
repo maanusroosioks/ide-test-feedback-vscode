@@ -1,13 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { registerRunCommand } from '../../../src/commands/run';
 import { CancelledError, MoodleSubmitError } from '../../../src/core/errors';
 import type { MoodleTestControl, PerformRunOptions } from '../../../src/ui/testController';
+import { fakeStatus, recordingLogger } from '../helpers/fakes';
 import {
   asContext,
   fakeExtensionContext,
   invokeCommand,
   progress,
-  resetVscodeStub,
   window,
   workspace,
   workspaceFolder,
@@ -21,8 +21,8 @@ function setup(submit = true) {
     folderFor: vi.fn<MoodleTestControl['folderFor']>(() => undefined),
     performRun: vi.fn<MoodleTestControl['performRun']>(async () => {}),
   };
-  const status = { running: vi.fn(), result: vi.fn(), error: vi.fn(), idle: vi.fn() };
-  const logger = { log: vi.fn() };
+  const status = fakeStatus();
+  const logger = recordingLogger();
   const context = fakeExtensionContext();
   registerRunCommand(asContext(context), COMMAND, submit, control, logger, status);
   return { control, status, logger, context };
@@ -31,10 +31,6 @@ function setup(submit = true) {
 function runOptions(control: ReturnType<typeof setup>['control']): PerformRunOptions {
   return control.performRun.mock.calls[0][0];
 }
-
-beforeEach(() => {
-  resetVscodeStub();
-});
 
 describe('run command', () => {
   it('registers under the given id', () => {

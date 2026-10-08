@@ -1,9 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ALL_ADAPTERS, ECOSYSTEMS } from '../../../src/ecosystems';
-
-const packageJson = JSON.parse(readFileSync(join(__dirname, '../../../package.json'), 'utf8'));
+import { packageJson } from '../helpers/project';
 
 describe('ALL_ADAPTERS', () => {
   it('gives every adapter its own id', () => {
@@ -12,8 +9,7 @@ describe('ALL_ADAPTERS', () => {
   });
 
   it('matches the preferredAdapter setting offered in package.json', () => {
-    const sections: Array<{ properties: Record<string, { enum?: string[] }> }> = packageJson.contributes.configuration;
-    const setting = sections.find((section) => 'moodleSubmit.preferredAdapter' in section.properties)!
+    const setting = packageJson.contributes.configuration.find((section) => 'moodleSubmit.preferredAdapter' in section.properties)!
       .properties['moodleSubmit.preferredAdapter'];
     expect(setting.enum).toEqual(ALL_ADAPTERS.map((adapter) => adapter.id));
   });

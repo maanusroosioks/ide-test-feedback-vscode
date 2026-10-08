@@ -1,13 +1,11 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect } from 'vitest';
 import { scanTestDeclarations, type SourceLanguage } from '../../../src/ecosystems';
 import type { TestDeclaration } from '../../../src/scanning';
+import { readFixture } from './project';
 
-const FIXTURES_DIR = join(__dirname, '../fixtures/source');
-
+/** `relative` is from test/unit/fixtures/source. */
 export function fixture(relative: string): string {
-  return readFileSync(join(FIXTURES_DIR, relative), 'utf8');
+  return readFixture(`source/${relative}`);
 }
 
 export function scan(relative: string, language: SourceLanguage): TestDeclaration[] {
@@ -21,6 +19,11 @@ export const declarations = {
   kotlin: scan('kotlin/CalculatorTest.kt', 'kotlin'),
   csharp: scan('csharp/CalculatorTests.cs', 'csharp'),
 };
+
+/** A hand-built declaration, for analysis that only cares about a field or two. */
+export function declaration(fields: Partial<TestDeclaration> = {}): TestDeclaration {
+  return { name: 'x', startLine: 1, endLine: 1, markers: [], containerMarkers: [], bodyText: '', ...fields };
+}
 
 /** Fails the test rather than silently picking one when a fixture has same-named declarations. */
 export function declarationNamed(found: TestDeclaration[], name: string): TestDeclaration {

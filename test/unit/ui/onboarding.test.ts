@@ -11,7 +11,6 @@ import {
   commands,
   configValues,
   fakeExtensionContext,
-  resetVscodeStub,
   window,
   type FakeExtensionContext,
 } from '../helpers/vscodeStub';
@@ -22,7 +21,6 @@ const WALKTHROUGH = ['workbench.action.openWalkthrough', 'example.moodle-test-su
 let context: FakeExtensionContext;
 
 beforeEach(() => {
-  resetVscodeStub();
   context = fakeExtensionContext();
 });
 

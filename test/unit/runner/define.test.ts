@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineAdapter, type PreparedRun } from '../../../src/runner/define';
 import { CancelledError } from '../../../src/core/errors';
+import type { NormalizedTestCase } from '../../../src/core/types';
+import { runCommand } from '../../../src/util/shell';
+import { recordingLogger } from '../helpers/fakes';
 
-const NOOP_COMMAND = 'node --version';
+vi.mock('../../../src/util/shell', () => ({ runCommand: vi.fn() }));
 
 function adapterThatPrepares(prepared: Partial<PreparedRun>) {
   return defineAdapter({
@@ -11,12 +14,20 @@ function adapterThatPrepares(prepared: Partial<PreparedRun>) {
     platform: 'python',
     detect: async () => true,
     prepare: async () => ({
-      command: NOOP_COMMAND,
+      command: 'fake-tool',
       parse: async () => [],
       ...prepared,
     }),
   });
 }
+
+beforeEach(() => {
+  vi.mocked(runCommand).mockReset();
+  vi.mocked(runCommand).mockImplementation(async (_command, { signal }) => {
+    if (signal?.aborted) throw new CancelledError();
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+});
 
 describe('defineAdapter', () => {
   it('stamps the run with the adapter id and language from the spec', async () => {
@@ -24,7 +35,7 @@ describe('defineAdapter', () => {
       parse: async () => [{ testName: 'works', status: 'PASSED' as const }],
     });
 
-    const result = await adapter.run(process.cwd(), {});
+    const result = await adapter.run('/work', {});
 
     expect(result.run.adapterId).toBe('fake');
     expect(result.run.platform).toBe('python');
@@ -33,55 +44,53 @@ describe('defineAdapter', () => {
     expect(result.run.finishedAt).toBeGreaterThanOrEqual(result.run.startedAt);
   });
 
+  it('runs the prepared command in the project folder', async () => {
+    await adapterThatPrepares({}).run('/work', {});
+
+    expect(runCommand).toHaveBeenCalledWith('fake-tool', expect.objectContaining({ cwd: '/work' }));
+  });
+
   it('reports an unreadable report instead of passing off empty results as a clean run', async () => {
-    const logged: string[] = [];
+    const logger = recordingLogger();
     const adapter = adapterThatPrepares({
       parse: async () => {
         throw new Error('no report was written to /tmp/nope.xml');
       },
     });
 
-    const result = await adapter.run(process.cwd(), { logger: { log: (m) => logged.push(m) } });
+    const result = await adapter.run('/work', { logger });
 
     expect(result.run.results).toEqual([]);
     expect(result.reportError).toContain('no report was written');
-    expect(logged.join('\n')).toContain('Fake Runner');
+    expect(logger.messages).toContainEqual(expect.stringContaining('Fake Runner'));
   });
 
   it('gives parse the timestamp taken before the command started', async () => {
-    let seen = 0;
     const before = Date.now();
-    const adapter = adapterThatPrepares({
-      parse: async (startedAt) => {
-        seen = startedAt;
-        return [];
-      },
-    });
+    const parse = vi.fn(async (_startedAt: number): Promise<NormalizedTestCase[]> => []);
 
-    const result = await adapter.run(process.cwd(), {});
+    const result = await adapterThatPrepares({ parse }).run('/work', {});
 
-    expect(seen).toBeGreaterThanOrEqual(before);
-    expect(seen).toBe(result.run.startedAt);
+    expect(result.run.startedAt).toBeGreaterThanOrEqual(before);
+    expect(parse).toHaveBeenCalledWith(result.run.startedAt);
   });
 
   it('cleans up when the run is cancelled', async () => {
-    let cleaned = 0;
-    const adapter = adapterThatPrepares({ cleanup: async () => void (cleaned += 1) });
+    const cleanup = vi.fn(async () => {});
+    const adapter = adapterThatPrepares({ cleanup });
 
-    await expect(
-      adapter.run(process.cwd(), { signal: AbortSignal.abort() }),
-    ).rejects.toBeInstanceOf(CancelledError);
-    expect(cleaned).toBe(1);
+    await expect(adapter.run('/work', { signal: AbortSignal.abort() })).rejects.toBeInstanceOf(CancelledError);
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it('hands cleanup back to the caller on the success path rather than running it early', async () => {
-    let cleaned = 0;
-    const adapter = adapterThatPrepares({ cleanup: async () => void (cleaned += 1) });
+    const cleanup = vi.fn(async () => {});
+    const adapter = adapterThatPrepares({ cleanup });
 
-    const result = await adapter.run(process.cwd(), {});
-    expect(cleaned).toBe(0);
+    const result = await adapter.run('/work', {});
+    expect(cleanup).not.toHaveBeenCalled();
 
     await result.cleanup();
-    expect(cleaned).toBe(1);
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 });

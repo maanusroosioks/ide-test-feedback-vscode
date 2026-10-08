@@ -1,15 +1,16 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   InvalidWorkspaceConfigError,
   MissingAssignmentKeyError,
+  WORKSPACE_CONFIG_FILE_NAME,
   normalizeRemoteUrl,
   readWorkspaceConfigFile,
   resolveSubmissionMetadata,
   writeWorkspaceAssignmentKey,
 } from '../../../src/core/submissionMetadata';
+import { tempDir } from '../helpers/fs';
 
 describe('resolveSubmissionMetadata', () => {
   it('takes the key and project name from the workspace file, and the rest from git', () => {
@@ -44,8 +45,8 @@ describe('resolveSubmissionMetadata', () => {
 
 describe('workspace config file', () => {
   async function folderWith(content?: string): Promise<{ folderPath: string; target: string }> {
-    const folderPath = await mkdtemp(join(tmpdir(), 'moodle-metadata-'));
-    const target = join(folderPath, '.moodle-submit.json');
+    const folderPath = await tempDir();
+    const target = join(folderPath, WORKSPACE_CONFIG_FILE_NAME);
     if (content !== undefined) await writeFile(target, content, 'utf8');
     return { folderPath, target };
   }

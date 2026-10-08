@@ -1,6 +1,6 @@
 // Stands in for the `vscode` module (aliased in vitest.config.ts), which only exists inside the
-// extension host. Covers just the API surface the extension uses; call resetVscodeStub() in
-// beforeEach so recorded calls and state don't leak between tests.
+// extension host. Covers just the API surface the extension uses; test/unit/setup.ts resets it
+// before every test so recorded calls and state don't leak between tests.
 
 import { vi, type Mock } from 'vitest';
 import type * as vscode from 'vscode';
