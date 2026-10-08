@@ -208,6 +208,24 @@ describe('performRun — results', () => {
     expect(folderNode(controller).description).toBeUndefined();
   });
 
+  it('shows the worse outcome when one name is reported twice in a suite', async () => {
+    const { control, controller } = setup();
+    testsRan([
+      { testSuite: SUITE, testName: 'test_add', status: 'FAILED', message: 'assert 1 == 2' },
+      { testSuite: SUITE, testName: 'test_add', status: 'PASSED' },
+      { testSuite: SUITE, testName: 'test_sub', status: 'PASSED' },
+      { testSuite: SUITE, testName: 'test_sub', status: 'ERROR' },
+    ]);
+
+    await performRun(control);
+
+    const [run] = controller.runs;
+    expect(run.outcomes.get(testId('test_add'))?.status).toBe('failed');
+    expect(run.outcomes.get(testId('test_sub'))?.status).toBe('errored');
+    const remembered = context.workspaceState.get<Record<string, KnownTest[]>>('moodleSubmit.knownTests')!;
+    expect(remembered[folderPath].map((test) => test.name)).toEqual(['test_add', 'test_sub']);
+  });
+
   it('points a failure at the line from its stack trace', async () => {
     const { control, controller } = setup();
     testsRan([
@@ -417,6 +435,31 @@ describe('performRun — submitting', () => {
     expect(runTests).not.toHaveBeenCalled();
   });
 
+  it('catches an invalid key before running, rather than after the whole test run', async () => {
+    await writeWorkspaceConfig(folderPath, { assignmentKey: 'week 3' });
+    const { control, controller } = setup();
+
+    await performRun(control, { submit: true });
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      `The assignment key in "calculator"'s .moodle-submit.json can't be used: The assignment key may only contain letters, digits, '_' and '-'.`,
+      'Fix key',
+    );
+    expect(controller.runs).toHaveLength(0);
+    expect(runTests).not.toHaveBeenCalled();
+  });
+
+  it('accepts a key with stray spaces around it in the file', async () => {
+    await writeWorkspaceConfig(folderPath, { assignmentKey: ' assignment-7 ' });
+    const { control } = setup();
+    testsRan(PASSING);
+
+    await performRun(control, { submit: true });
+
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(runTests).toHaveBeenCalledOnce();
+  });
+
   it('saves a key entered at the prompt and goes on to run', async () => {
     await rm(join(folderPath, WORKSPACE_CONFIG_FILE_NAME));
     window.showWarningMessage.mockResolvedValueOnce('Add key');
@@ -538,6 +581,30 @@ describe('performRun — submitting', () => {
     expect(evidence?.files[0].content).toBeUndefined();
   });
 
+  it('refuses a second run in a folder that is still running, which would clear its reports mid-build', async () => {
+    const { control } = setup();
+    let finish = (): void => {};
+    vi.mocked(runTests).mockImplementationOnce(
+      () =>
+        new Promise((resolveRun) => {
+          finish = () => resolveRun({ run: testRun(PASSING), summary: { total: 1, passed: 1, failed: 0, skipped: 0 } });
+        }),
+    );
+
+    const first = performRun(control);
+    await vi.waitFor(() => expect(runTests).toHaveBeenCalledOnce());
+    await performRun(control);
+
+    expect(runTests).toHaveBeenCalledOnce();
+    expect(window.showInformationMessage).toHaveBeenCalledWith('Tests are already running in "calculator".');
+
+    finish();
+    await first;
+    testsRan(PASSING);
+    await performRun(control);
+    expect(runTests).toHaveBeenCalledTimes(2);
+  });
+
   it('surfaces a failed submission in the run output', async () => {
     const { control, controller } = setup();
     testsRan(PASSING);
@@ -580,6 +647,34 @@ describe('run profile and folderFor', () => {
     await controller.profiles[0].handler(new TestRunRequest());
 
     expect(vi.mocked(runTests).mock.calls[0][1]).toBe(folderPath);
+  });
+
+  it('runs every folder the selection spans, each once', async () => {
+    const other = workspaceFolder(await tempDir(), 'other', 1);
+    workspace.workspaceFolders = [workspace.workspaceFolders![0], other];
+    const { controller } = setup();
+    testsRan(PASSING);
+    const root = (folder: typeof other) => controller.items.get(folder.uri.fsPath)!;
+
+    await controller.profiles[0].handler(
+      new TestRunRequest([root(other), root(workspace.workspaceFolders[0]), root(other)]),
+    );
+
+    expect(vi.mocked(runTests).mock.calls.map((call) => call[1])).toEqual([other.uri.fsPath, folderPath]);
+  });
+
+  it("keeps running the other folders when one folder's build fails", async () => {
+    const other = workspaceFolder(await tempDir(), 'other', 1);
+    workspace.workspaceFolders = [workspace.workspaceFolders![0], other];
+    const { controller, status } = setup();
+    testsRan(PASSING);
+    vi.mocked(runTests).mockRejectedValueOnce(new Error('mvn: command not found'));
+    const roots = workspace.workspaceFolders.map((folder) => controller.items.get(folder.uri.fsPath)!);
+
+    await controller.profiles[0].handler(new TestRunRequest(roots));
+
+    expect(vi.mocked(runTests)).toHaveBeenCalledTimes(2);
+    expect(status.error).toHaveBeenCalledWith('mvn: command not found');
   });
 
   it('reports profile run failures through the status bar instead of throwing', async () => {

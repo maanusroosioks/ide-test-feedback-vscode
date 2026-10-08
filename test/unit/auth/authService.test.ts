@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '../../../src/auth/authService';
+import { CancelledError } from '../../../src/core/errors';
 import { authentication, window } from '../helpers/vscodeStub';
 
 const SCOPES = ['User.Read'];
@@ -40,6 +41,21 @@ describe('AuthService', () => {
   it('returns the session token, prompting to sign in if needed', async () => {
     expect(await service.getAccessToken()).toBe('token-abc');
     expect(authentication.getSession).toHaveBeenCalledWith('microsoft', SCOPES, { createIfNone: true });
+  });
+
+  it.each([
+    ['the consent refusal', new Error('User did not consent to login.')],
+    ['a Canceled error', Object.assign(new Error('Canceled'), { name: 'Canceled' })],
+  ])('turns %s from a dismissed sign-in dialog into a quiet cancel', async (_label, dismissal) => {
+    authentication.getSession.mockRejectedValueOnce(dismissal);
+
+    await expect(service.getAccessToken()).rejects.toBeInstanceOf(CancelledError);
+  });
+
+  it('passes other sign-in failures through', async () => {
+    authentication.getSession.mockRejectedValueOnce(new Error('AADSTS50020: user account not in tenant'));
+
+    await expect(service.login()).rejects.toThrow('AADSTS50020');
   });
 
   it('forces a new session when asked to refresh', async () => {

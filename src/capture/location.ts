@@ -1,5 +1,5 @@
 import { readdir } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathExists } from '../util/shell';
 import type { Platform } from '../core/types';
 import { PLATFORMS, type PlatformProfile, type StackFrame } from '../ecosystems';
@@ -20,6 +20,11 @@ const SHARED_IGNORED_DIRS = ['node_modules', 'dist', 'out'];
 
 function hasDirectorySegment(file: string): boolean {
   return file.includes('/') || file.includes('\\');
+}
+
+function isInside(folderPath: string, path: string): boolean {
+  const rel = relative(folderPath, path);
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 function samePath(a: string, b: string): boolean {
@@ -187,7 +192,12 @@ export class TestLocationResolver {
     return this.modules;
   }
 
+  /**
+   * Anything outside the project counts as missing: located files are submitted, and a stack
+   * frame can point into site-packages or a sibling project.
+   */
   private existsCached(path: string): Promise<boolean> {
+    if (!isInside(this.folderPath, path)) return Promise.resolve(false);
     let cached = this.existsCache.get(path);
     if (!cached) {
       cached = this.exists(path);

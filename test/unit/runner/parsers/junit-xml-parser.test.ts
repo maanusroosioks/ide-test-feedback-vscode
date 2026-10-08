@@ -36,6 +36,21 @@ describe('parseJUnitXml', () => {
     expect(skipped?.status).toBe('SKIPPED');
   });
 
+  it('names a test case that has no name, rather than letting it sink the submission', () => {
+    const [result] = parseJUnitXml('<testsuite name="s"><testcase classname="s"/></testsuite>');
+
+    expect(result.testName).toBe('(unnamed test)');
+  });
+
+  it('keeps a numeric-looking failure body as text', () => {
+    const [result] = parseJUnitXml(`<testsuite name="s">
+      <testcase classname="s" name="t"><failure message="7">42</failure></testcase>
+    </testsuite>`);
+
+    expect(result.message).toBe('7');
+    expect(result.stackTrace).toBe('42');
+  });
+
   it('parses a pytest-style report (testsuites wrapper, includes an error case)', () => {
     const results = parseJUnitXml(readFixture('junit/sample-pytest-junit.xml'));
 
@@ -116,17 +131,15 @@ describe('parseJUnitXmlDirectory', () => {
     expect(await parseJUnitXmlDirectory(root, { reportDir: 'build/test-results/test' })).toHaveLength(2);
   });
 
-  it('with since, ignores report files left over from an earlier run', async () => {
+  // Clearing the report dirs before the run is what keeps old reports out: file times can come
+  // from another machine's clock on a network share or a WSL path.
+  it('reads a report whatever its timestamp says', async () => {
     const dir = await tempDir();
-    await writeTree(dir, { 'TEST-stale.xml': MINIMAL_XML });
-    const longAgo = new Date(Date.now() - 60_000);
-    await utimes(join(dir, 'TEST-stale.xml'), longAgo, longAgo);
+    await writeTree(dir, { 'TEST-skewed.xml': MINIMAL_XML });
+    const longAgo = new Date(Date.now() - 60 * 60_000);
+    await utimes(join(dir, 'TEST-skewed.xml'), longAgo, longAgo);
 
-    const since = Date.now();
-    await writeTree(dir, { 'TEST-fresh.xml': MINIMAL_XML });
-
-    expect(await parseJUnitXmlDirectory(dir, { since })).toHaveLength(1);
-    expect(await parseJUnitXmlDirectory(dir)).toHaveLength(2);
+    expect(await parseJUnitXmlDirectory(dir)).toHaveLength(1);
   });
 
   it('returns results in a stable order regardless of filesystem ordering', async () => {

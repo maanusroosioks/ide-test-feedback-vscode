@@ -23,7 +23,8 @@ export const pythonSource: SourceLanguageProfile = {
   scanDeclarations: scanPython,
   assertions:
     /(?:^|[^.\w])assert\b|\bself\s*\.\s*(?:assert\w+|fail)\s*\(|\bpytest\s*\.\s*(?:raises|fail)\s*\(|\b(?:np|numpy)\s*\.\s*testing\s*\.\s*assert_\w+\s*\(/g,
-  skipMarkers: [/@\s*(?:pytest\s*\.\s*mark\s*\.\s*)?skip(?:if)?\b/, /@\s*unittest\s*\.\s*skip\w*\b/],
+  // Unconditional skips only, as on the JVM: `skipif`/`skipIf`/`skipUnless` tests usually do run.
+  skipMarkers: [/@\s*(?:pytest\s*\.\s*mark\s*\.\s*)?skip\b/, /@\s*unittest\s*\.\s*skip\b/],
   skipInBody: [/\bpytest\s*\.\s*skip\s*\(/, /\bself\s*\.\s*skipTest\s*\(/],
   noopPatterns: [/\bpass\b/g, /\bNone\b/g],
 };

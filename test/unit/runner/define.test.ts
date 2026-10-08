@@ -65,14 +65,14 @@ describe('defineAdapter', () => {
     expect(logger.messages).toContainEqual(expect.stringContaining('Fake Runner'));
   });
 
-  it('gives parse the timestamp taken before the command started', async () => {
+  it('times the run from just before the command starts', async () => {
     const before = Date.now();
-    const parse = vi.fn(async (_startedAt: number): Promise<NormalizedTestCase[]> => []);
+    const parse = vi.fn(async (): Promise<NormalizedTestCase[]> => []);
 
     const result = await adapterThatPrepares({ parse }).run('/work', {});
 
     expect(result.run.startedAt).toBeGreaterThanOrEqual(before);
-    expect(parse).toHaveBeenCalledWith(result.run.startedAt);
+    expect(parse).toHaveBeenCalledOnce();
   });
 
   it('cleans up when the run is cancelled', async () => {

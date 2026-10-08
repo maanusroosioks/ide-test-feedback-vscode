@@ -132,4 +132,25 @@ describe('ensureConfigured', () => {
     expect(await ensureConfigured(asContext(context))).toBe(false);
     expect(commands.executeCommand).not.toHaveBeenCalled();
   });
+
+  it('flags a URL that submission would refuse before any tests run', async () => {
+    configValues.set('serviceUrl', 'http://bridge.example.edu');
+
+    expect(await ensureConfigured(asContext(context))).toBe(false);
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      "The Moodle submission service URL can't be used: The URL must use https:// (http:// is only allowed for localhost).",
+      'Configure now',
+      'Open setup',
+    );
+  });
+
+  it('proceeds once "Configure now" has fixed an unusable URL', async () => {
+    configValues.set('serviceUrl', 'http://bridge.example.edu');
+    window.showWarningMessage.mockResolvedValueOnce('Configure now');
+    commands.executeCommand.mockImplementationOnce(async () => {
+      configValues.set('serviceUrl', 'https://bridge.example.edu');
+    });
+
+    expect(await ensureConfigured(asContext(context))).toBe(true);
+  });
 });

@@ -274,7 +274,7 @@ export const window = {
 
 export const workspace = {
   workspaceFolders: undefined as vscode.WorkspaceFolder[] | undefined,
-  getConfiguration: stubFn((_section?: string) => ({
+  getConfiguration: stubFn((_section?: string, _scope?: Uri) => ({
     get: <T>(key: string, fallback?: T): T | undefined =>
       configValues.has(key) ? (configValues.get(key) as T) : fallback,
     update: configUpdate,

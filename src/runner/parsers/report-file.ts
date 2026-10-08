@@ -4,6 +4,9 @@ import { describeError, MoodleSubmitError } from '../../core/errors';
 /** A report that could not be used — distinct from a run that had no tests. */
 export class ReportUnavailableError extends MoodleSubmitError {}
 
+/** For a result without a name: a blank one would make the gateway reject the whole run over one test. */
+export const UNNAMED_TEST = '(unnamed test)';
+
 export async function parseReportFile<T>(
   path: string,
   parse: (content: string) => T[],

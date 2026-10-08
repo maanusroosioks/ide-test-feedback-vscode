@@ -48,6 +48,20 @@ describe('analyzeDeclaration — python', () => {
     });
   });
 
+  it.each(['@unittest.skip("parked")', '@skip'])('reads the unconditional skip %s', (marker) => {
+    const skipped = declaration({ markers: [marker], bodyText: '    assert True' });
+    expect(analyzeDeclaration(skipped, 'python').skipMarker).toBe(marker);
+  });
+
+  it.each([
+    '@pytest.mark.skipif(sys.platform == "win32", reason="posix only")',
+    '@unittest.skipIf(sys.version_info < (3, 12), "needs 3.12")',
+    '@unittest.skipUnless(HAS_NUMPY, "needs numpy")',
+  ])('does not treat the conditional %s as a skip, since the test usually runs', (marker) => {
+    const conditional = declaration({ markers: [marker], bodyText: '    assert True' });
+    expect(analyzeDeclaration(conditional, 'python').skipMarker).toBeUndefined();
+  });
+
   it('does not double-count self.assertX as a bare assert', () => {
     expect(analyzeDeclaration(declaration({ bodyText: 'self.assertEqual(1, 1)' }), 'python').assertionCount).toBe(1);
   });

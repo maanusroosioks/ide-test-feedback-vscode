@@ -9,3 +9,8 @@ tsconfig.json
 vitest.config.ts
 **/*.map
 **/*.ts
+.claude/**
+node_modules/**
+docs/**
+out/**
+*.vsix

@@ -21,6 +21,22 @@ export function tempFileReport({ adapterId, extension, command, parse }: TempFil
   };
 }
 
+export interface TempDirReportOptions {
+  adapterId: string;
+  command(reportDir: string): string;
+  parse(reportDir: string): Promise<NormalizedTestCase[]>;
+}
+
+/** For a tool that names its own report files: a fresh temp directory per run, removed on cleanup. */
+export function tempDirReport({ adapterId, command, parse }: TempDirReportOptions): PreparedRun {
+  const reportDir = tempReportPath(adapterId, 'reports');
+  return {
+    command: command(reportDir),
+    parse: () => parse(reportDir),
+    cleanup: () => cleanupReport(reportDir),
+  };
+}
+
 export interface JUnitReportDirsOptions {
   folderPath: string;
   /** Matched as a path suffix, see {@link parseJUnitXmlDirectory}. */
@@ -40,10 +56,9 @@ export async function junitReportDirs({
   await clearReportDirs(folderPath, reportDir);
   return {
     command,
-    parse: (startedAt) =>
+    parse: () =>
       parseJUnitXmlDirectory(folderPath, {
         reportDir,
-        since: startedAt,
         onWarning: (message) => logger?.log(message),
       }),
   };

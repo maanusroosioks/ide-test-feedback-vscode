@@ -59,6 +59,12 @@ describe('workspace config file', () => {
     expect(await readWorkspaceConfigFile(folderPath)).toEqual({ assignmentKey: 'a-1', projectName: 'p' });
   });
 
+  it('reads a file saved with a byte-order mark, as Windows PowerShell writes it', async () => {
+    const { folderPath } = await folderWith(`${String.fromCharCode(0xfeff)}{"assignmentKey":"a-1"}`);
+
+    expect(await readWorkspaceConfigFile(folderPath)).toEqual({ assignmentKey: 'a-1' });
+  });
+
   it('is undefined when the file does not exist', async () => {
     const { folderPath } = await folderWith();
     expect(await readWorkspaceConfigFile(folderPath)).toBeUndefined();
@@ -100,6 +106,12 @@ describe('normalizeRemoteUrl', () => {
 
   it('converts an explicit ssh:// remote to HTTPS', () => {
     expect(normalizeRemoteUrl('ssh://git@github.com/org/repo.git')).toBe('https://github.com/org/repo');
+  });
+
+  it('drops the SSH port, which is no part of the web URL', () => {
+    expect(normalizeRemoteUrl('ssh://git@gitlab.example.edu:2222/group/repo.git')).toBe(
+      'https://gitlab.example.edu/group/repo',
+    );
   });
 
   it.each([

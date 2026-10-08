@@ -13,6 +13,7 @@ import { createOutputChannelLogger, getOutputChannel } from './ui/outputChannel'
 import { createStatusReporter } from './ui/statusBar';
 import { registerTestController } from './ui/testController';
 import { maybePromptOnboarding, refreshConfiguredContext } from './ui/onboarding';
+import { killRunningCommands } from './util/shell';
 
 export function activate(context: vscode.ExtensionContext): void {
   const registry = new AdapterRegistry();
@@ -57,4 +58,6 @@ export function activate(context: vscode.ExtensionContext): void {
   void maybePromptOnboarding(context);
 }
 
-export function deactivate(): void {}
+export function deactivate(): Promise<void> {
+  return killRunningCommands();
+}

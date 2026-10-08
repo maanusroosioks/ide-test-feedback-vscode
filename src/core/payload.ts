@@ -17,6 +17,12 @@ export class InvalidPayloadError extends MoodleSubmitError {
   }
 }
 
+/**
+ * Not a gateway limit: the one free-text field a test controls, capped so a huge assertion diff
+ * can't push the whole run past the request size limit.
+ */
+const MAX_MESSAGE_CHARS = 4000;
+
 function truncate(value: string, max: number): string;
 function truncate(value: string | undefined, max: number): string | undefined;
 function truncate(value: string | undefined, max: number): string | undefined {
@@ -99,7 +105,7 @@ export function buildTestRunRequest(
       testName: textField(testCase.testName, REQUEST_LIMITS.testName),
       status: testCase.status,
       durationMs: durationField(testCase.durationMs),
-      message: sanitizeForParamText(testCase.message),
+      message: textField(testCase.message, MAX_MESSAGE_CHARS),
       source: source ? toSourceRequest(source) : undefined,
     };
   });

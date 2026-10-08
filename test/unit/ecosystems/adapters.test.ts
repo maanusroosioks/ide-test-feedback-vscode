@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,7 +6,7 @@ import { dotnetTestAdapter } from '../../../src/ecosystems/dotnet/dotnet-test';
 import { gradleJunitAdapter } from '../../../src/ecosystems/jvm/gradle-junit';
 import { mavenJunitAdapter } from '../../../src/ecosystems/jvm/maven-junit';
 import { pytestAdapter } from '../../../src/ecosystems/python/pytest';
-import { pathExists, runCommand, type RunCommandOptions } from '../../../src/util/shell';
+import { commandExists, pathExists, runCommand, type RunCommandOptions } from '../../../src/util/shell';
 import { recordingLogger } from '../helpers/fakes';
 import { tempDir, writeTree } from '../helpers/fs';
 import { readFixture } from '../helpers/project';
@@ -16,6 +16,7 @@ import { readFixture } from '../helpers/project';
 vi.mock('../../../src/util/shell', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/util/shell')>()),
   runCommand: vi.fn(),
+  commandExists: vi.fn(),
 }));
 
 const JUNIT_XML = `<?xml version="1.0"?>
@@ -44,6 +45,7 @@ let folder: string;
 
 beforeEach(async () => {
   vi.mocked(runCommand).mockReset();
+  vi.mocked(commandExists).mockReset().mockResolvedValue(false);
   folder = await tempDir();
 });
 
@@ -54,12 +56,13 @@ describe('mavenJunitAdapter', () => {
     expect(await mavenJunitAdapter.detect(folder)).toBe(true);
   });
 
-  it('runs mvn in batch mode from the project folder', async () => {
+  it('runs mvn in batch mode from the project folder, past modules with failing tests', async () => {
     simulateTool();
 
     await mavenJunitAdapter.run(folder, {});
 
-    expect(lastCommand().command).toBe('mvn -B test');
+    // Without ignoring failures, a reactor build skips every module after the first failing one.
+    expect(lastCommand().command).toBe('mvn -B test -Dmaven.test.failure.ignore=true');
     expect(lastCommand().options.cwd).toBe(folder);
   });
 
@@ -117,15 +120,33 @@ describe('mavenJunitAdapter', () => {
   });
 });
 
+describe('mavenJunitAdapter — wrapper', () => {
+  const wrapper = process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw';
+  // Through sh, a wrapper unzipped without its execute bit still runs.
+  const wrapperInvocation = process.platform === 'win32' ? 'mvnw.cmd' : 'sh ./mvnw';
+
+  it('prefers the project wrapper, so Maven need not be installed', async () => {
+    await writeTree(folder, { [wrapper]: '' });
+    simulateTool();
+
+    await mavenJunitAdapter.run(folder, {});
+
+    expect(lastCommand().command).toBe(`${wrapperInvocation} -B test -Dmaven.test.failure.ignore=true`);
+  });
+});
+
 describe('gradleJunitAdapter', () => {
   const wrapper = process.platform === 'win32' ? 'gradlew.bat' : 'gradlew';
-  const wrapperInvocation = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
+  const wrapperInvocation = process.platform === 'win32' ? 'gradlew.bat' : 'sh ./gradlew';
 
-  it.each(['build.gradle', 'build.gradle.kts'])('detects a folder with %s', async (buildFile) => {
-    expect(await gradleJunitAdapter.detect(folder)).toBe(false);
-    await writeTree(folder, { [buildFile]: '' });
-    expect(await gradleJunitAdapter.detect(folder)).toBe(true);
-  });
+  it.each(['build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts'])(
+    'detects a folder with %s',
+    async (buildFile) => {
+      expect(await gradleJunitAdapter.detect(folder)).toBe(false);
+      await writeTree(folder, { [buildFile]: '' });
+      expect(await gradleJunitAdapter.detect(folder)).toBe(true);
+    },
+  );
 
   it('prefers the project wrapper when there is one', async () => {
     await writeTree(folder, { [wrapper]: '' });
@@ -133,15 +154,15 @@ describe('gradleJunitAdapter', () => {
 
     await gradleJunitAdapter.run(folder, {});
 
-    expect(lastCommand().command).toBe(`${wrapperInvocation} cleanTest test`);
+    expect(lastCommand().command).toBe(`${wrapperInvocation} cleanTest test --continue`);
   });
 
-  it('falls back to gradle on PATH without a wrapper', async () => {
+  it('falls back to gradle on PATH without a wrapper, continuing past failing subprojects', async () => {
     simulateTool();
 
     await gradleJunitAdapter.run(folder, {});
 
-    expect(lastCommand().command).toBe('gradle cleanTest test');
+    expect(lastCommand().command).toBe('gradle cleanTest test --continue');
   });
 
   it('clears stale results even when an override omits cleanTest', async () => {
@@ -193,6 +214,30 @@ describe('pytestAdapter', () => {
     },
   );
 
+  it.each(['test_calc.py', 'calc_test.py', 'tests/test_calc.py', 'test/test_calc.py'])(
+    'detects a project with no config, only %s',
+    async (testFile) => {
+      await writeTree(folder, { 'calc.py': '', 'requirements.txt': '' });
+      expect(await pytestAdapter.detect(folder)).toBe(false);
+
+      await writeTree(folder, { [testFile]: '' });
+      expect(await pytestAdapter.detect(folder)).toBe(true);
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    "prefers the py launcher on Windows, since bare python may be the Store's install stub",
+    async () => {
+      vi.mocked(commandExists).mockResolvedValue(true);
+      simulateTool();
+
+      await pytestAdapter.run(folder, {});
+
+      expect(commandExists).toHaveBeenCalledWith('py');
+      expect(lastCommand().command).toMatch(/^py -3 -m pytest --junit-xml="/);
+    },
+  );
+
   it('runs pytest as a module and asks for a JUnit XML report in the temp directory', async () => {
     simulateTool();
 
@@ -209,6 +254,16 @@ describe('pytestAdapter', () => {
     await pytestAdapter.run(folder, { commandOverride: 'poetry run pytest -q' });
 
     expect(lastCommand().command).toMatch(/^poetry run pytest -q --junit-xml=".+\.xml"$/);
+  });
+
+  it.each(['.venv', 'venv', 'env'])("uses the project's %s interpreter, which has pytest installed", async (venv) => {
+    const interpreter = process.platform === 'win32' ? join(venv, 'Scripts', 'python.exe') : join(venv, 'bin', 'python');
+    await writeTree(folder, { [interpreter]: '' });
+    simulateTool();
+
+    await pytestAdapter.run(folder, {});
+
+    expect(lastCommand().command.startsWith(`${interpreter} -m pytest --junit-xml="`)).toBe(true);
   });
 
   it('parses the report pytest wrote and removes it on cleanup', async () => {
@@ -251,14 +306,24 @@ describe('pytestAdapter', () => {
 });
 
 describe('dotnetTestAdapter', () => {
-  function trxPathOf(command: string): string {
-    const name = /--logger "trx;LogFileName=([^"]+)"/.exec(command)?.[1];
+  function reportDirOf(command: string): string {
     const dir = /--results-directory "([^"]+)"/.exec(command)?.[1];
-    if (!name || !dir) throw new Error(`no TRX logger flags in: ${command}`);
-    return join(dir, name);
+    if (!dir) throw new Error(`no --results-directory flag in: ${command}`);
+    return dir;
   }
 
-  it.each(['App.csproj', 'App.sln'])('detects a folder with %s', async (projectFile) => {
+  /** Plays `dotnet test`, which creates the results directory and names each project's TRX itself. */
+  function writeReports(reports: Record<string, string>): ToolBehavior {
+    return async (command) => {
+      const dir = reportDirOf(command);
+      await mkdir(dir, { recursive: true });
+      for (const [name, content] of Object.entries(reports)) {
+        await writeFile(join(dir, name), content, 'utf8');
+      }
+    };
+  }
+
+  it.each(['App.csproj', 'App.sln', 'App.slnx'])('detects a folder with %s', async (projectFile) => {
     expect(await dotnetTestAdapter.detect(folder)).toBe(false);
     await writeTree(folder, { [projectFile]: '' });
     expect(await dotnetTestAdapter.detect(folder)).toBe(true);
@@ -268,15 +333,65 @@ describe('dotnetTestAdapter', () => {
     expect(await dotnetTestAdapter.detect(join(folder, 'missing'))).toBe(false);
   });
 
-  it('asks dotnet test for a TRX report in the temp directory', async () => {
+  it('asks dotnet test for TRX reports in a fresh temp directory, leaving the file names to it', async () => {
     simulateTool();
 
     await dotnetTestAdapter.run(folder, {});
 
     const { command } = lastCommand();
-    expect(command).toMatch(/^dotnet test --logger "trx;LogFileName=/);
-    expect(dirname(trxPathOf(command))).toBe(resolve(tmpdir()));
-    expect(trxPathOf(command)).toMatch(/\.trx$/);
+    expect(command).toMatch(/^dotnet test --logger trx --results-directory "/);
+    expect(command).not.toContain('LogFileName');
+    expect(dirname(reportDirOf(command))).toBe(resolve(tmpdir()));
+  });
+
+  it('targets the solution when it sits next to a project, which bare dotnet test refuses', async () => {
+    await writeTree(folder, { 'Calc.sln': '', 'Calc.csproj': '' });
+    simulateTool();
+
+    await dotnetTestAdapter.run(folder, {});
+
+    expect(lastCommand().command).toMatch(/^dotnet test "Calc\.sln" --logger trx /);
+  });
+
+  it('targets an .slnx solution next to a project the same way', async () => {
+    await writeTree(folder, { 'Calc.slnx': '', 'Calc.csproj': '' });
+    simulateTool();
+
+    await dotnetTestAdapter.run(folder, {});
+
+    expect(lastCommand().command).toMatch(/^dotnet test "Calc\.slnx" --logger trx /);
+  });
+
+  it('finds a test project in its own folder when there is no solution', async () => {
+    await writeTree(folder, { 'Calc/Calc.csproj': '', 'Calc.Tests/Calc.Tests.csproj': '' });
+    expect(await dotnetTestAdapter.detect(folder)).toBe(true);
+    simulateTool();
+
+    await dotnetTestAdapter.run(folder, {});
+
+    expect(lastCommand().command).toMatch(/^dotnet test "Calc\.Tests\/Calc\.Tests\.csproj" --logger trx /);
+  });
+
+  it('explains what to do with several test projects and no solution', async () => {
+    await writeTree(folder, { 'A.Tests/A.Tests.csproj': '', 'B.Tests/B.Tests.csproj': '' });
+    simulateTool();
+
+    await expect(dotnetTestAdapter.run(folder, {})).rejects.toThrow(/dotnet new sln/);
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
+  it('does not detect a folder whose subfolders hold only non-test projects', async () => {
+    await writeTree(folder, { 'Calc/Calc.csproj': '' });
+    expect(await dotnetTestAdapter.detect(folder)).toBe(false);
+  });
+
+  it('leaves a lone project to dotnet test', async () => {
+    await writeTree(folder, { 'Calc.Tests.csproj': '' });
+    simulateTool();
+
+    await dotnetTestAdapter.run(folder, {});
+
+    expect(lastCommand().command).toMatch(/^dotnet test --logger trx /);
   });
 
   it('appends the report flags to a command override', async () => {
@@ -284,23 +399,45 @@ describe('dotnetTestAdapter', () => {
 
     await dotnetTestAdapter.run(folder, { commandOverride: 'dotnet test Calc.Tests' });
 
-    expect(lastCommand().command).toMatch(/^dotnet test Calc\.Tests --logger "trx;/);
+    expect(lastCommand().command).toMatch(/^dotnet test Calc\.Tests --logger trx --results-directory "/);
   });
 
-  it('parses the TRX report and removes it on cleanup', async () => {
-    const fixture = readFixture('dotnet/sample-results.trx');
-    let reportPath = '';
-    simulateTool(async (command) => {
-      reportPath = trxPathOf(command);
-      await writeFile(reportPath, fixture, 'utf8');
-    });
+  it('parses the TRX report and removes its directory on cleanup', async () => {
+    simulateTool(writeReports({ 'run.trx': readFixture('dotnet/sample-results.trx') }));
 
     const result = await dotnetTestAdapter.run(folder, {});
+    const dir = reportDirOf(lastCommand().command);
 
     expect(result.run).toMatchObject({ adapterId: 'dotnet-test', platform: 'dotnet' });
     expect(result.run.results.map((r) => r.status)).toEqual(['PASSED', 'FAILED', 'SKIPPED']);
 
     await result.cleanup();
-    expect(await pathExists(reportPath)).toBe(false);
+    expect(await pathExists(dir)).toBe(false);
+  });
+
+  it('keeps the results of every test project in a solution', async () => {
+    const fixture = readFixture('dotnet/sample-results.trx');
+    simulateTool(writeReports({ 'a_Calc.Tests.trx': fixture, 'b_Parser.Tests.trx': fixture, 'notes.txt': 'x' }));
+
+    const result = await dotnetTestAdapter.run(folder, {});
+
+    expect(result.run.results).toHaveLength(6);
+  });
+
+  it('explains a missing report rather than reporting zero tests', async () => {
+    simulateTool();
+
+    const result = await dotnetTestAdapter.run(folder, {});
+
+    expect(result.run.results).toEqual([]);
+    expect(result.reportError).toContain('no report was written');
+  });
+
+  it('explains a results directory with no TRX in it', async () => {
+    simulateTool(writeReports({ 'notes.txt': 'x' }));
+
+    const result = await dotnetTestAdapter.run(folder, {});
+
+    expect(result.reportError).toContain('no TRX report was written');
   });
 });

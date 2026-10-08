@@ -20,6 +20,8 @@ import {
 } from '../helpers/vscodeStub';
 
 const COMMAND = 'moodleSubmit.configureAssignment';
+const ALL_SAVED = 'Moodle Submit configuration saved.';
+const URL_ONLY_SAVED = `Service URL saved. Add an assignment key to the project's ${WORKSPACE_CONFIG_FILE_NAME} before submitting.`;
 
 type Validator = (value: string) => string | undefined;
 type InputBoxOptions = { value?: string; validateInput: Validator };
@@ -89,9 +91,34 @@ describe('configureAssignment command', () => {
 
     expect(validate('  ')).toBe('The service URL is required.');
     expect(validate('moodle-bridge')).toBe('Enter a full URL, e.g. https://moodle-bridge.example.edu');
-    expect(validate('ftp://moodle-bridge.example.edu')).toBe('The URL must start with http:// or https://');
+    expect(validate('ftp://moodle-bridge.example.edu')).toBe('The URL must start with https://');
     expect(validate('https://moodle-bridge.example.edu')).toBeUndefined();
     expect(validate('  http://localhost:8080  ')).toBeUndefined();
+  });
+
+  it('refuses plain HTTP except to a local service, since the sign-in token is sent along', async () => {
+    enterInputs(undefined);
+    await invokeCommand(COMMAND);
+    const validate = inputBoxOptions(0).validateInput;
+
+    expect(validate('http://moodle-bridge.example.edu')).toBe(
+      'The URL must use https:// (http:// is only allowed for localhost).',
+    );
+    expect(validate('http://127.0.0.1:8080')).toBeUndefined();
+    expect(validate('http://[::1]:8080')).toBeUndefined();
+  });
+
+  it('refuses a query, fragment or credentials, which would break the submission URL', async () => {
+    enterInputs(undefined);
+    await invokeCommand(COMMAND);
+    const validate = inputBoxOptions(0).validateInput;
+    const noQuery = 'Enter just the base URL, without a ?query or #fragment.';
+
+    expect(validate('https://bridge.example.edu/base?course=7')).toBe(noQuery);
+    expect(validate('https://bridge.example.edu/?')).toBe(noQuery);
+    expect(validate('https://bridge.example.edu/#top')).toBe(noQuery);
+    expect(validate('https://me:secret@bridge.example.edu')).toBe('Leave the user name and password out of the URL.');
+    expect(validate('https://bridge.example.edu/moodle/')).toBeUndefined();
   });
 
   it('saves the trimmed URL to user settings', async () => {
@@ -101,7 +128,15 @@ describe('configureAssignment command', () => {
 
     expect(configUpdate).toHaveBeenCalledOnce();
     expect(configUpdate).toHaveBeenCalledWith('serviceUrl', 'https://bridge.example.edu', ConfigurationTarget.Global);
-    expect(messagesShown(window.showInformationMessage)).toContain('Moodle Submit configuration saved.');
+  });
+
+  it('says the key is still missing when no folder is open to hold it', async () => {
+    enterInputs('https://bridge.example.edu');
+
+    await invokeCommand(COMMAND);
+
+    expect(messagesShown(window.showInformationMessage)).toContain(URL_ONLY_SAVED);
+    expect(messagesShown(window.showInformationMessage)).not.toContain(ALL_SAVED);
   });
 
   it('skips the assignment key when no folder is open', async () => {
@@ -177,6 +212,7 @@ describe('configureAssignment command — assignment key', () => {
 
     expect(inputBoxOptions(1).value).toBe('');
     expect(await readFile(target, 'utf8')).toBe('{\n  "assignmentKey": "assignment-7"\n}\n');
+    expect(messagesShown(window.showInformationMessage)).toContain(ALL_SAVED);
   });
 
   it('requires a valid, non-blank key', async () => {
@@ -189,12 +225,13 @@ describe('configureAssignment command — assignment key', () => {
     expect(validate(' assignment-7 ')).toBeUndefined();
   });
 
-  it('writes nothing when the key prompt is cancelled', async () => {
+  it('writes nothing when the key prompt is cancelled, and does not claim it did', async () => {
     enterInputs('https://bridge.example.edu', undefined);
 
     await invokeCommand(COMMAND);
 
     expect(await pathExists(target)).toBe(false);
+    expect(messagesShown(window.showInformationMessage)).toContain(URL_ONLY_SAVED);
   });
 
   it('pre-fills from the file and updates the key while keeping other fields', async () => {
@@ -227,7 +264,7 @@ describe('configureAssignment command — assignment key', () => {
       'Could not save the assignment key for "calculator": .moodle-submit.json could not be read: it is not valid JSON.',
     );
     expect(await readFile(target, 'utf8')).toBe('{ not json');
-    expect(messagesShown(window.showInformationMessage)).toContain('Moodle Submit configuration saved.');
+    expect(messagesShown(window.showInformationMessage)).toContain(URL_ONLY_SAVED);
   });
 
   it('warns instead of failing when the file cannot be written', async () => {
@@ -237,6 +274,16 @@ describe('configureAssignment command — assignment key', () => {
     await invokeCommand(COMMAND);
 
     expect(messagesShown(window.showWarningMessage)[0]).toMatch(/^Could not save the assignment key for "gone": /);
-    expect(messagesShown(window.showInformationMessage)).toContain('Moodle Submit configuration saved.');
+    expect(messagesShown(window.showInformationMessage)).toContain(URL_ONLY_SAVED);
+  });
+
+  it('reads a file saved with a byte-order mark', async () => {
+    await writeFile(target, `${String.fromCharCode(0xfeff)}{"assignmentKey":"mine"}`, 'utf8');
+    enterInputs('https://bridge.example.edu', 'mine');
+
+    await invokeCommand(COMMAND);
+
+    expect(inputBoxOptions(1).value).toBe('mine');
+    expect(messagesShown(window.showWarningMessage)).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { TestRunnerAdapter } from '../runner/types';
-import { MoodleSubmitError } from '../core/errors';
+import { CancelledError, MoodleSubmitError } from '../core/errors';
 
 export class NoWorkspaceFolderError extends MoodleSubmitError {
   constructor() {
@@ -22,7 +22,7 @@ export async function resolveWorkspaceFolder(): Promise<vscode.WorkspaceFolder> 
   }
   const picked = await pickWorkspaceFolder('Which folder holds the tests to run?');
   if (!picked) {
-    throw new NoWorkspaceFolderError();
+    throw new CancelledError();
   }
   return picked;
 }
@@ -46,7 +46,7 @@ export async function pickAdapter(candidates: TestRunnerAdapter[]): Promise<Test
     { placeHolder: 'Multiple test frameworks detected — choose one' },
   );
   if (!pick) {
-    throw new MoodleSubmitError('No test adapter selected.');
+    throw new CancelledError();
   }
   return pick.adapter;
 }

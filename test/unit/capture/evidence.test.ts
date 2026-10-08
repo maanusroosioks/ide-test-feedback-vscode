@@ -1,4 +1,4 @@
-import { join, relative, resolve, sep } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TestLocationResolver } from '../../../src/capture/location';
 import { collectTestEvidence, type CaptureOptions, type TestEvidence } from '../../../src/capture/evidence';
@@ -175,8 +175,8 @@ describe('collectTestEvidence — paths must not leak the student', () => {
     expect(filePathOf(evidence.payload.sources[0])).toBe('tests/test_calculator.py');
   });
 
-  it('degrades to the basename for a file outside the workspace folder', async () => {
-    const outside = resolve('/elsewhere/vendor/test_outside.py');
+  it('never reads or submits a file outside the workspace folder', async () => {
+    const outside = resolve('/elsewhere/site-packages/helper.py');
     const testRun = run([
       {
         testSuite: 'unresolvable',
@@ -186,11 +186,32 @@ describe('collectTestEvidence — paths must not leak the student', () => {
       },
     ]);
 
-    const { evidence } = await collect(testRun, { [outside]: 'def test_x():\n    assert True\n' });
+    const { evidence, reads } = await collect(testRun, { [outside]: 'def test_x():\n    assert True\n' });
 
-    expect(filePathOf(evidence.payload.sources[0])).toBe('test_outside.py');
-    expect(filePathOf(evidence.payload.sources[0])).not.toContain(sep);
     expect(relative(FOLDER, outside)).toMatch(/^\.\./);
+    expect(kindsOf(evidence)).toEqual(['NONE']);
+    expect(evidence.payload.files).toEqual([]);
+    expect(reads).toEqual([]);
+  });
+
+  it('prefers a frame inside the workspace over an earlier one outside it', async () => {
+    const outside = resolve('/elsewhere/site-packages/helper.py');
+    const testRun = run([
+      {
+        testSuite: 'unresolvable',
+        testName: 'test_add_returns_sum',
+        status: 'FAILED',
+        stackTrace: [
+          `File "${outside}", line 3, in helper`,
+          `File "${resolve(FOLDER, 'test_calculator.py')}", line 12, in test_add_returns_sum`,
+        ].join('\n'),
+      },
+    ]);
+
+    const { evidence } = await collect(testRun, { ...PYTHON_FILES, [outside]: 'def helper():\n    pass\n' });
+
+    expect(filePathOf(evidence.payload.sources[0])).toBe('test_calculator.py');
+    expect(evidence.payload.files.map((file) => file.path)).toEqual(['test_calculator.py']);
   });
 });
 

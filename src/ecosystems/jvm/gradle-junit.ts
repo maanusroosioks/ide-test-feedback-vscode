@@ -1,21 +1,20 @@
-import { join } from 'node:path';
 import { defineAdapter } from '../../runner/define';
-import { anyExists, pathExists } from '../../util/shell';
+import { anyExists } from '../../util/shell';
 import { junitReportDirs } from '../../runner/reports';
+import { wrapperInvocation } from './wrapper';
 
 /** Matched as a path suffix: a multi-project build writes one per subproject. */
 const REPORT_DIR = 'build/test-results/test';
 
-const BUILD_FILES = ['build.gradle', 'build.gradle.kts'];
+/** A multi-project build may keep its build files in the subprojects, leaving only settings at the root. */
+const BUILD_FILES = ['build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts'];
+
+/** `--continue`: otherwise the first subproject with a failing test stops the others' tests from running. */
+const TEST_TASKS = 'cleanTest test --continue';
 
 async function resolveGradleCommand(folderPath: string): Promise<string> {
-  const isWindows = process.platform === 'win32';
-  const wrapper = isWindows ? 'gradlew.bat' : 'gradlew';
-  // cmd.exe resolves a bare name against the working directory; sh does not.
-  const invocation = isWindows ? wrapper : `./${wrapper}`;
-  return (await pathExists(join(folderPath, wrapper)))
-    ? `${invocation} cleanTest test`
-    : 'gradle cleanTest test';
+  const wrapper = await wrapperInvocation(folderPath, { windows: 'gradlew.bat', posix: 'gradlew' });
+  return `${wrapper ?? 'gradle'} ${TEST_TASKS}`;
 }
 
 export const gradleJunitAdapter = defineAdapter({

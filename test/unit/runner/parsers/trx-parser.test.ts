@@ -34,6 +34,23 @@ describe('parseTrx — edge cases', () => {
   </Results>
 </TestRun>`;
 
+  it('names a result that has no name', () => {
+    const [result] = parseTrx('<TestRun><Results><UnitTestResult testId="1" outcome="Passed"/></Results></TestRun>');
+
+    expect(result.testName).toBe('(unnamed test)');
+  });
+
+  it('keeps a numeric-looking message as text', () => {
+    const [result] = parseTrx(`<TestRun><Results>
+      <UnitTestResult testId="1" testName="Fails" outcome="Failed">
+        <Output><ErrorInfo><Message>42</Message><StackTrace>007</StackTrace></ErrorInfo></Output>
+      </UnitTestResult>
+    </Results></TestRun>`);
+
+    expect(result.message).toBe('42');
+    expect(result.stackTrace).toBe('007');
+  });
+
   it.each(['Timeout', 'Aborted', 'Inconclusive'])('reports a %s outcome as an error', (outcome) => {
     expect(parseTrx(report(outcome))[0]).toMatchObject({ testName: 'HangsForever', status: 'ERROR' });
   });

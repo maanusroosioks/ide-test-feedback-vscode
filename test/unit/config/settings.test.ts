@@ -11,6 +11,7 @@ import {
 } from '../../../src/config/settings';
 import {
   ConfigurationTarget,
+  Uri,
   configUpdate,
   configValues,
   workspace,
@@ -47,6 +48,19 @@ describe('settings getters', () => {
     expect(getTestCommandOverrides()).toEqual({ pytest: 'pytest -q' });
     expect(getPreferredAdapterId()).toBe('pytest');
     expect(getWarnOnSuspiciousTests()).toBe(false);
+  });
+});
+
+describe('folder-scoped settings', () => {
+  it.each([
+    ['getPreferredAdapterId', () => getPreferredAdapterId('/work/api')],
+    ['getTestCommandOverrides', () => getTestCommandOverrides('/work/api')],
+    ['getSourceCaptureSettings', () => getSourceCaptureSettings('/work/api')],
+    ['getWarnOnSuspiciousTests', () => getWarnOnSuspiciousTests('/work/api')],
+  ])("%s reads the folder's own value in a multi-root workspace", (_name, read) => {
+    read();
+
+    expect(workspace.getConfiguration).toHaveBeenCalledWith('moodleSubmit', Uri.file('/work/api'));
   });
 });
 

@@ -8,6 +8,12 @@ export class MissingServiceUrlError extends MoodleSubmitError {
   }
 }
 
+export class InvalidServiceUrlError extends MoodleSubmitError {
+  constructor(problem: string) {
+    super(`The moodleSubmit.serviceUrl setting is not usable: ${problem}`);
+  }
+}
+
 export class NetworkError extends MoodleSubmitError {
   constructor(
     message: string,
@@ -17,6 +23,8 @@ export class NetworkError extends MoodleSubmitError {
   }
 }
 
+const MAX_BODY_IN_MESSAGE = 500;
+
 export class HttpError extends MoodleSubmitError {
   constructor(
     public readonly status: number,
@@ -25,7 +33,9 @@ export class HttpError extends MoodleSubmitError {
     super(`Request failed with status ${status}`);
   }
 
+  /** Capped: a proxy's error page can be a whole HTML document. */
   get userMessage(): string {
-    return `Submission service returned ${this.status}: ${this.body}`;
+    const body = this.body.length > MAX_BODY_IN_MESSAGE ? `${this.body.slice(0, MAX_BODY_IN_MESSAGE)}…` : this.body;
+    return `Submission service returned ${this.status}: ${body}`;
   }
 }

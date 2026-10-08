@@ -2,25 +2,9 @@ import * as vscode from 'vscode';
 import type { AuthService } from '../auth/authService';
 import { getRequestTimeoutMs, getServiceUrl, setServiceUrl } from '../config/settings';
 import { WORKSPACE_CONFIG_FILE_NAME } from '../core/submissionMetadata';
+import { serviceUrlProblem } from '../services/moodleApiClient';
 import { promptAndSaveAssignmentKey } from '../ui/assignmentKey';
 import { pickWorkspaceFolder } from '../ui/workspacePicker';
-
-function validateUrl(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return 'The service URL is required.';
-  }
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
-    return 'Enter a full URL, e.g. https://moodle-bridge.example.edu';
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    return 'The URL must start with http:// or https://';
-  }
-  return undefined;
-}
 
 async function reportReachability(baseUrl: string): Promise<void> {
   const url = baseUrl.replace(/\/+$/, '');
@@ -49,7 +33,7 @@ export function registerConfigureAssignmentCommand(
         placeHolder: 'https://moodle-bridge.example.edu',
         value: getServiceUrl(),
         ignoreFocusOut: true,
-        validateInput: validateUrl,
+        validateInput: serviceUrlProblem,
       });
       if (serviceUrl === undefined) {
         return;
@@ -61,9 +45,7 @@ export function registerConfigureAssignmentCommand(
       const folder = await pickWorkspaceFolder(
         `Which project's ${WORKSPACE_CONFIG_FILE_NAME} should get the assignment key?`,
       );
-      if (folder) {
-        await promptAndSaveAssignmentKey(folder);
-      }
+      const keySaved = folder ? await promptAndSaveAssignmentKey(folder) : false;
 
       if (!(await authService.isSignedIn())) {
         const choice = await vscode.window.showInformationMessage(
@@ -76,7 +58,11 @@ export function registerConfigureAssignmentCommand(
         }
       }
 
-      void vscode.window.showInformationMessage('Moodle Submit configuration saved.');
+      void vscode.window.showInformationMessage(
+        keySaved
+          ? 'Moodle Submit configuration saved.'
+          : `Service URL saved. Add an assignment key to the project's ${WORKSPACE_CONFIG_FILE_NAME} before submitting.`,
+      );
     }),
   );
 }

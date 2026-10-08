@@ -52,8 +52,10 @@ export function resolveSubmissionMetadata(sources: MetadataSources): SubmissionM
   };
 }
 
+/** Trimmed: stray spaces in a hand-edited file would otherwise fail validation only at submit time. */
 function optionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value : undefined;
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed || undefined;
 }
 
 /** `undefined` when the file doesn't exist; throws when it exists but isn't a JSON object. */
@@ -67,7 +69,8 @@ async function readConfigRecord(folderPath: string): Promise<Record<string, unkn
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    // Windows PowerShell's `-Encoding utf8` and some editors write a BOM, which JSON.parse rejects.
+    parsed = JSON.parse(raw.replace(/^\uFEFF/, ''));
   } catch {
     throw new InvalidWorkspaceConfigError('it is not valid JSON');
   }
@@ -102,8 +105,12 @@ export async function readGitCommitHash(folderPath: string): Promise<string | un
   return commitHash.length > 0 ? commitHash : undefined;
 }
 
-/** SCP-like syntax (`git@host:owner/repo.git`), with or without an explicit `ssh://`. */
-const SCP_LIKE_URL = /^(?:ssh:\/\/)?[^@/\s]+@([^:/\s]+)[:/](.+?)(?:\.git)?\/?$/;
+/** SCP-like syntax, `git@host:owner/repo.git`. An explicit `ssh://` URL is parsed as a URL instead. */
+const SCP_LIKE_URL = /^[^@/\s]+@([^:/\s]+):(.+?)(?:\.git)?\/?$/;
+
+function repoPath(pathname: string): string {
+  return pathname.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.git$/, '');
+}
 
 /** Azure DevOps SSH hosts, current and legacy, whose `v3/org/project/repo` path isn't a web URL. */
 const AZURE_SSH_HOSTS = new Set(['ssh.dev.azure.com', 'vs-ssh.visualstudio.com']);
@@ -134,6 +141,8 @@ export function normalizeRemoteUrl(raw: string): string | undefined {
 
   try {
     const url = new URL(trimmed);
+    // `hostname`, not `host`: an SSH port (`ssh://git@host:2222/...`) is no part of the web URL.
+    if (url.protocol === 'ssh:') return scpToHttps(url.hostname, repoPath(url.pathname));
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
     return `https://${url.host}${url.pathname.replace(/\.git\/?$/, '')}`;
   } catch {

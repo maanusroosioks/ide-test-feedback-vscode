@@ -3,7 +3,12 @@
   "displayName": "Moodle Test Submit",
   "description": "Run your unit tests and submit the results to Moodle",
   "version": "0.1.0",
-  "private": true,
+  "publisher": "moodle-tools",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maanusroosioks/vscode-plugin.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },

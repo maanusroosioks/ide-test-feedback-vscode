@@ -47,7 +47,7 @@ export async function runTests(
   folderPath: string,
   { logger, signal, onOutput, pickFromMultiple }: RunTestsOptions,
 ): Promise<TestRunOutcome> {
-  const preferredAdapterId = getPreferredAdapterId();
+  const preferredAdapterId = getPreferredAdapterId(folderPath);
   const adapter = await registry.resolveAdapter(folderPath, { preferredAdapterId, pickFromMultiple });
 
   // A forced adapter bypasses detection, so flag one that doesn't fit the folder.
@@ -60,7 +60,7 @@ export async function runTests(
     logger.log(`Detected adapter: ${adapter.displayName}`);
   }
 
-  const overrides = getTestCommandOverrides();
+  const overrides = getTestCommandOverrides(folderPath);
   const result = await adapter.run(folderPath, {
     commandOverride: overrides[adapter.id],
     signal,

@@ -60,6 +60,15 @@ describe('buildTestRunRequest', () => {
     expect(serialized).not.toContain('Traceback');
   });
 
+  it('caps a huge failure message so it cannot sink the whole run', () => {
+    const run = testRun([{ testName: 'test_big_diff', status: 'FAILED', message: `<${'x'.repeat(50_000)}>` }]);
+
+    const [result] = buildTestRunRequest(run, metadata).results;
+
+    expect(result.message).toHaveLength(4000);
+    expect(result.message?.startsWith('xxx')).toBe(true);
+  });
+
   it('throws InvalidPayloadError when there are no results', () => {
     expect(() => buildTestRunRequest(sampleRun({ results: [] }), metadata)).toThrow(InvalidPayloadError);
   });

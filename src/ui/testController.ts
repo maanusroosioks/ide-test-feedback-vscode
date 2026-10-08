@@ -20,8 +20,8 @@ import {
 import { runTests } from '../core/testRunner';
 import { pickAdapter, resolveWorkspaceFolder } from './workspacePicker';
 import { submitRun } from '../core/submitRun';
-import type { NormalizedTestCase, NormalizedTestRun } from '../core/types';
-import { describeError } from '../core/errors';
+import type { NormalizedTestCase, NormalizedTestRun, TestStatus } from '../core/types';
+import { CancelledError, describeError } from '../core/errors';
 import { handleCommandError } from './errorHandling';
 import { ensureConfigured } from './onboarding';
 import { ensureAssignmentKey } from './assignmentKey';
@@ -30,6 +30,8 @@ import { confirmDegradedRun, describeFinding } from './degradedRunPrompt';
 import type { Logger, StatusReporter } from '../core/ports';
 
 const KNOWN_TESTS_KEY = 'moodleSubmit.knownTests';
+
+const SEVERITY: Record<TestStatus, number> = { SKIPPED: 0, PASSED: 1, FAILED: 2, ERROR: 3 };
 
 export interface TestControllerDeps {
   registry: AdapterRegistry;
@@ -205,9 +207,16 @@ export function registerTestController(
     const remembered: KnownTest[] = [];
     const liveSuites = new Set<string>();
     const liveTests = new Map<string, Set<string>>();
+    const reported = new Map<string, TestStatus>();
 
     for (const testCase of run.results) {
       const suite = suiteKey(testCase.testSuite);
+      const testId = testItemId(folderPath, suite, testCase.testName);
+      // A name repeated in one suite (unnamed cases, a rerun) shares one item: the worse outcome stands.
+      const previous = reported.get(testId);
+      if (previous !== undefined && SEVERITY[previous] >= SEVERITY[testCase.status]) continue;
+      reported.set(testId, testCase.status);
+
       const location = await resolver.resolveTestLocation(testCase.testSuite, testCase.stackTrace);
       const suiteFile = await resolver.resolveSuiteFile(testCase.testSuite);
 
@@ -221,7 +230,6 @@ export function registerTestController(
       suiteItem.description = suiteDescription(suite);
       liveSuites.add(suiteId);
 
-      const testId = testItemId(folderPath, suite, testCase.testName);
       const item = childItem(
         suiteItem,
         testId,
@@ -232,7 +240,9 @@ export function registerTestController(
         item.range = lineRange(location.line);
       }
       liveTests.set(suiteId, (liveTests.get(suiteId) ?? new Set()).add(testId));
-      remembered.push({ suite, name: testCase.testName, file: location?.file });
+      if (previous === undefined) {
+        remembered.push({ suite, name: testCase.testName, file: location?.file });
+      }
 
       testRun.started(item);
       reportResult(testRun, item, testCase, location);
@@ -297,7 +307,7 @@ export function registerTestController(
     try {
       const evidence = await collectTestEvidence(run, resolver, {
         folderPath: folder.uri.fsPath,
-        ...getSourceCaptureSettings(),
+        ...getSourceCaptureSettings(folder.uri.fsPath),
       });
       const { sources, files } = evidence.payload;
       const located = sources.filter((source) => source.kind === 'TEST').length;
@@ -315,7 +325,24 @@ export function registerTestController(
 
   // ----------------------------------------------------------------- run ----
 
-  async function performRun({
+  const inFlight = new Set<string>();
+
+  async function performRun(options: PerformRunOptions): Promise<void> {
+    const { folder } = options;
+    // A second build in the same folder would clear the first one's reports mid-run.
+    if (inFlight.has(folder.uri.fsPath)) {
+      void vscode.window.showInformationMessage(`Tests are already running in "${folder.name}".`);
+      return;
+    }
+    inFlight.add(folder.uri.fsPath);
+    try {
+      await runFolder(options);
+    } finally {
+      inFlight.delete(folder.uri.fsPath);
+    }
+  }
+
+  async function runFolder({
     folder,
     submit,
     request,
@@ -368,7 +395,7 @@ export function registerTestController(
         for (const finding of findings) {
           deps.logger.log(`Integrity warning: ${describeFinding(finding)}`);
         }
-        if (findings.length > 0 && getWarnOnSuspiciousTests()) {
+        if (findings.length > 0 && getWarnOnSuspiciousTests(folder.uri.fsPath)) {
           if (!(await confirmDegradedRun(findings, summary.total))) {
             deps.logger.log('Submission cancelled at the integrity warning.');
             testRun.appendOutput(toCrlf('\nSubmission cancelled.\n'));
@@ -404,21 +431,38 @@ export function registerTestController(
 
   // ------------------------------------------------------------- profile ----
 
-  // One profile: submitting is the separate runAndSubmit command. No handler-token wiring, since
-  // the run created for this request shares its cancellation and performRun listens on that.
-  const runHandler = async (request: vscode.TestRunRequest): Promise<void> => {
+  // One profile: submitting is the separate runAndSubmit command. Each folder's run shares the
+  // request's cancellation and performRun listens on that; the handler token only stops the loop.
+  const runHandler = async (request: vscode.TestRunRequest, token?: vscode.CancellationToken): Promise<void> => {
+    let folders: vscode.WorkspaceFolder[];
     try {
-      await performRun({ folder: await folderForRequest(request), submit: false, request });
+      folders = await foldersForRequest(request);
     } catch (error) {
       handleCommandError(error, deps.logger, deps.status);
+      return;
+    }
+    // One folder failing to build shouldn't keep the others from running.
+    for (const folder of folders) {
+      if (token?.isCancellationRequested) return;
+      try {
+        await performRun({ folder, submit: false, request });
+      } catch (error) {
+        handleCommandError(error, deps.logger, deps.status);
+        if (error instanceof CancelledError) return;
+      }
     }
   };
 
   controller.createRunProfile('Run Tests', vscode.TestRunProfileKind.Run, runHandler, true);
 
-  async function folderForRequest(request: vscode.TestRunRequest): Promise<vscode.WorkspaceFolder> {
-    const included = request.include?.length ? folderOf(request.include[0]) : undefined;
-    return included ?? resolveWorkspaceFolder();
+  /** Each folder the selection touches, once; with no selection, the active or picked one. */
+  async function foldersForRequest(request: vscode.TestRunRequest): Promise<vscode.WorkspaceFolder[]> {
+    const included = new Map<string, vscode.WorkspaceFolder>();
+    for (const item of request.include ?? []) {
+      const folder = folderOf(item);
+      if (folder) included.set(folder.uri.fsPath, folder);
+    }
+    return included.size > 0 ? [...included.values()] : [await resolveWorkspaceFolder()];
   }
 
   function folderFor(target: unknown): vscode.WorkspaceFolder | undefined {

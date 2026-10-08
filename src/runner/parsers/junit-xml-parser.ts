@@ -1,11 +1,11 @@
 import type { Dirent } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import type { NormalizedTestCase, TestStatus } from '../../core/types';
 import { describeError } from '../../core/errors';
 import { removeDir } from '../../util/shell';
-import { parseReportFile } from './report-file';
+import { parseReportFile, UNNAMED_TEST } from './report-file';
 
 interface JUnitFailureXml {
   '@_message'?: string;
@@ -14,7 +14,7 @@ interface JUnitFailureXml {
 
 interface JUnitTestCaseXml {
   '@_classname'?: string;
-  '@_name': string;
+  '@_name'?: string;
   '@_time'?: string;
   failure?: JUnitFailureXml | JUnitFailureXml[] | string;
   error?: JUnitFailureXml | JUnitFailureXml[] | string;
@@ -31,6 +31,8 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   textNodeName: '#text',
+  // Otherwise a failure body that happens to be numeric arrives as a number.
+  parseTagValue: false,
   isArray: (name) => name === 'testsuite' || name === 'testcase',
 });
 
@@ -74,7 +76,7 @@ function collectSuite(suite: JUnitTestSuiteXml, into: NormalizedTestCase[]): voi
     into.push({
       // pytest names every suite "pytest"; only the case carries the owning module.
       testSuite: testcase['@_classname'] ?? suite['@_name'],
-      testName: testcase['@_name'],
+      testName: testcase['@_name'] || UNNAMED_TEST,
       status,
       durationMs: toMillis(testcase['@_time']),
       message,
@@ -107,9 +109,6 @@ export function parseJUnitXmlFile(path: string): Promise<NormalizedTestCase[]> {
   return parseReportFile(path, parseJUnitXml);
 }
 
-/** Some filesystems round mtime down to whole seconds; don't discard fresh reports over it. */
-const STALE_SLACK_MS = 2000;
-
 /** Large or irrelevant trees that never contain report directories. */
 const PRUNE_DIRS = new Set([
   '.git',
@@ -135,8 +134,6 @@ export interface CollectReportsOptions {
    * `surefire-reports` or `build/test-results/test`. Unset means any directory.
    */
   reportDir?: string;
-  /** Ignore report files last modified before this timestamp (see {@link STALE_SLACK_MS}). */
-  since?: number;
   /** Called per unusable report file; the rest are still parsed. */
   onWarning?(message: string): void;
 }
@@ -187,16 +184,11 @@ async function findReportDirs(root: string, suffix: string[]): Promise<ScannedDi
   return scanned.filter(({ dir }) => endsWithSegments(dir, suffix));
 }
 
-async function isFresh(path: string, since?: number): Promise<boolean> {
-  if (since === undefined) return true;
-  try {
-    return (await stat(path)).mtimeMs >= since - STALE_SLACK_MS;
-  } catch {
-    return false;
-  }
-}
-
-/** Clears previous results. Walks rather than taking a fixed path: one dir per module. */
+/**
+ * Clears previous results, so whatever is there after the run is from it. Walks rather than taking
+ * a fixed path: one dir per module. (Not file timestamps: on a network share or a WSL path those
+ * come from another machine's clock.)
+ */
 export async function clearReportDirs(root: string, reportDir: string): Promise<void> {
   const suffix = segmentsOf(reportDir);
   if (suffix.length === 0) {
@@ -220,7 +212,6 @@ export async function parseJUnitXmlDirectory(
 
   const perFile = await Promise.all(
     files.map(async (path) => {
-      if (!(await isFresh(path, opts.since))) return [];
       try {
         return await parseJUnitXmlFile(path);
       } catch (error) {

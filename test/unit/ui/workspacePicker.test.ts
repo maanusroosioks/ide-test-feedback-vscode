@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MoodleSubmitError } from '../../../src/core/errors';
+import { CancelledError } from '../../../src/core/errors';
 import {
   NoWorkspaceFolderError,
   pickAdapter,
@@ -77,10 +77,10 @@ describe('resolveWorkspaceFolder', () => {
     expect(await resolveWorkspaceFolder()).toBe(api);
   });
 
-  it('fails when the user dismisses the folder picker', async () => {
+  it('cancels quietly, rather than claiming no folder is open, when the picker is dismissed', async () => {
     workspace.workspaceFolders = [api, web];
 
-    await expect(resolveWorkspaceFolder()).rejects.toBeInstanceOf(NoWorkspaceFolderError);
+    await expect(resolveWorkspaceFolder()).rejects.toBeInstanceOf(CancelledError);
   });
 });
 
@@ -99,9 +99,7 @@ describe('pickAdapter', () => {
     ]);
   });
 
-  it('fails when the user picks nothing', async () => {
-    await expect(pickAdapter([adapter('a'), adapter('b')])).rejects.toThrow(
-      new MoodleSubmitError('No test adapter selected.'),
-    );
+  it('cancels quietly when the user picks nothing', async () => {
+    await expect(pickAdapter([adapter('a'), adapter('b')])).rejects.toBeInstanceOf(CancelledError);
   });
 });

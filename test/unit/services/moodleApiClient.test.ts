@@ -1,6 +1,12 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { MoodleApiClient } from '../../../src/services/moodleApiClient';
-import { HttpError, MissingServiceUrlError, NetworkError, TimeoutError } from '../../../src/services/errors';
+import {
+  HttpError,
+  InvalidServiceUrlError,
+  MissingServiceUrlError,
+  NetworkError,
+  TimeoutError,
+} from '../../../src/services/errors';
 import type { TestRunRequest } from '../../../src/services/httpTypes';
 
 const samplePayload: TestRunRequest = {
@@ -92,5 +98,57 @@ describe('MoodleApiClient', () => {
 
     await expect(client({ baseUrl: '' }).submitResults(samplePayload)).rejects.toBeInstanceOf(MissingServiceUrlError);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never sends the token over plain HTTP to a remote host, even if settings.json was edited by hand', async () => {
+    const fetchMock = stubFetch();
+    const getAccessToken = vi.fn(async () => 'token-abc');
+
+    await expect(
+      client({ baseUrl: 'http://moodle-bridge.example.edu', token: getAccessToken }).submitResults(samplePayload),
+    ).rejects.toBeInstanceOf(InvalidServiceUrlError);
+    expect(getAccessToken).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('allows plain HTTP to a local service', async () => {
+    stubFetch(jsonResponse(200, {}));
+
+    await expect(client({ baseUrl: 'http://localhost:8080' }).submitResults(samplePayload)).resolves.toMatchObject({
+      status: 200,
+    });
+  });
+
+  it('times out a response whose body stalls after the headers', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, init: RequestInit) => {
+          const body = new ReadableStream({
+            start(controller) {
+              init.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+            },
+          });
+          return new Response(body, { status: 200 });
+        }),
+      );
+
+      const submitted = client().submitResults(samplePayload);
+      const outcome = expect(submitted).rejects.toBeInstanceOf(TimeoutError);
+      await vi.advanceTimersByTimeAsync(5000);
+      await outcome;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('HttpError', () => {
+  it("caps the response body in the user's message, since an error page can be a whole HTML document", () => {
+    const message = new HttpError(502, `<html>${'x'.repeat(10_000)}</html>`).userMessage;
+
+    expect(message.length).toBeLessThan(600);
+    expect(message.startsWith('Submission service returned 502: <html>')).toBe(true);
   });
 });

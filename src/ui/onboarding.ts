@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getServiceUrl } from '../config/settings';
+import { serviceUrlProblem } from '../services/moodleApiClient';
 
 const WALKTHROUGH_ID = 'setup';
 const NUDGE_DISMISSED_KEY = 'moodleSubmit.onboardingDismissed';
@@ -42,12 +43,20 @@ export async function maybePromptOnboarding(context: vscode.ExtensionContext): P
   }
 }
 
+/** Why the configured URL can't be submitted to, so a submitting run can stop before the tests rather than after. */
+function configuredUrlProblem(): string | undefined {
+  return isConfigured() ? serviceUrlProblem(getServiceUrl()) : undefined;
+}
+
 /** Offers to finish setup before a submitting run. `false` means abort quietly, no error. */
 export async function ensureConfigured(context: vscode.ExtensionContext): Promise<boolean> {
-  if (isConfigured()) return true;
+  const problem = configuredUrlProblem();
+  if (isConfigured() && !problem) return true;
 
   const pick = await vscode.window.showWarningMessage(
-    'Set the Moodle submission service URL before submitting.',
+    problem
+      ? `The Moodle submission service URL can't be used: ${problem}`
+      : 'Set the Moodle submission service URL before submitting.',
     'Configure now',
     'Open setup',
   );
@@ -58,5 +67,5 @@ export async function ensureConfigured(context: vscode.ExtensionContext): Promis
     await openSetupWalkthrough(context);
   }
 
-  return isConfigured();
+  return isConfigured() && !configuredUrlProblem();
 }

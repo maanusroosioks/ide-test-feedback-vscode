@@ -5,8 +5,7 @@ import type { AdapterRunResult, RunOptions, TestRunnerAdapter } from './types';
 
 export interface PreparedRun {
   command: string;
-  /** `startedAt` is taken just before the command runs, for mtime-based freshness checks. */
-  parse(startedAt: number): Promise<NormalizedTestCase[]>;
+  parse(): Promise<NormalizedTestCase[]>;
   cleanup?(): Promise<void>;
 }
 
@@ -46,7 +45,7 @@ export function defineAdapter(spec: AdapterSpec): TestRunnerAdapter {
         let results: NormalizedTestCase[] = [];
         let reportError: string | undefined;
         try {
-          results = await prepared.parse(startedAt);
+          results = await prepared.parse();
         } catch (error) {
           reportError = describeError(error);
           opts.logger?.log(`${displayName}: ${reportError}`);

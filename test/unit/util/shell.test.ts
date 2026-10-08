@@ -1,9 +1,17 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CancelledError } from '../../../src/core/errors';
-import { anyExists, cleanupReport, pathExists, runCommand, tempReportPath } from '../../../src/util/shell';
+import {
+  anyExists,
+  cleanupReport,
+  commandExists,
+  killRunningCommands,
+  pathExists,
+  runCommand,
+  tempReportPath,
+} from '../../../src/util/shell';
 import { tempDir, writeTree } from '../helpers/fs';
 
 describe('anyExists', () => {
@@ -110,4 +118,84 @@ describe('runCommand', () => {
     // Well inside the 5s test timeout, which would otherwise fire first and hide a slow kill.
     expect(Date.now() - started).toBeLessThan(3_000);
   });
+
+  // The command runs under a shell; killing only the shell would orphan it, as cmd.exe does to mvn.
+  it("kills the shell's child process too, not just the shell", async () => {
+    const pidFile = join(await tempDir(), 'pid').split(sep).join('/');
+    const controller = new AbortController();
+
+    const run = runCommand(
+      node(`require('fs').writeFileSync('${pidFile}', String(process.pid)); setTimeout(() => {}, 30000)`),
+      { cwd: process.cwd(), signal: controller.signal },
+    );
+    const pid = await waitFor(async () => Number(await readFile(pidFile, 'utf8').catch(() => '')) || undefined);
+    controller.abort();
+    await expect(run).rejects.toBeInstanceOf(CancelledError);
+
+    expect(await waitFor(async () => (isAlive(pid) ? undefined : true))).toBe(true);
+  });
+
+  it('stops passing output on once cancelled, since the run it belongs to has ended', async () => {
+    const controller = new AbortController();
+    const chunks: string[] = [];
+
+    const run = runCommand(node("setInterval(() => process.stdout.write('tick'), 20)"), {
+      cwd: process.cwd(),
+      signal: controller.signal,
+      onOutput: (chunk) => chunks.push(chunk),
+    });
+    await waitFor(async () => (chunks.length > 0 ? true : undefined));
+    controller.abort();
+    await expect(run).rejects.toBeInstanceOf(CancelledError);
+    const seenAtCancel = chunks.length;
+
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 200));
+    expect(chunks).toHaveLength(seenAtCancel);
+  });
+
+  it('stops every running command on request, as on deactivation', async () => {
+    const pidFile = join(await tempDir(), 'pid').split(sep).join('/');
+
+    const run = runCommand(
+      node(`require('fs').writeFileSync('${pidFile}', String(process.pid)); setTimeout(() => {}, 30000)`),
+      { cwd: process.cwd() },
+    );
+    const pid = await waitFor(async () => Number(await readFile(pidFile, 'utf8').catch(() => '')) || undefined);
+    await killRunningCommands();
+
+    expect((await run).exitCode).not.toBe(0);
+    expect(await waitFor(async () => (isAlive(pid) ? undefined : true))).toBe(true);
+  });
+
+  it('reports a command that cannot be started as a failure, not a crash', async () => {
+    const result = await runCommand(node('0'), { cwd: join(process.cwd(), 'no-such-dir') });
+
+    expect(result.exitCode).not.toBe(0);
+  });
 });
+
+describe('commandExists', () => {
+  it('finds a command on PATH without running it', async () => {
+    expect(await commandExists('node')).toBe(true);
+    expect(await commandExists('no-such-command-moodle-submit')).toBe(false);
+  });
+});
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitFor<T>(probe: () => Promise<T | undefined>, timeoutMs = 3_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await probe();
+    if (value !== undefined) return value;
+    if (Date.now() > deadline) throw new Error('timed out waiting');
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+  }
+}
