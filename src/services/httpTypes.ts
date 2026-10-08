@@ -34,12 +34,12 @@ export function assignmentKeyProblem(assignmentKey: string): string | undefined 
 }
 
 /**
- * Omitted entirely when the test was not found in the project's source. `filePath` alone means the
+ * Omitted entirely when the test was not found in the project's source. `path` alone means the
  * file was found but the test could not be picked out of it — read the whole file from `testFiles`.
  */
 export interface TestSourceRequest {
   /** Workspace-relative, forward slashes. Never absolute. */
-  filePath: string;
+  path: string;
   /** 1-based, in the original file: slice this range out of the matching `testFiles` content. */
   startLine?: number;
   endLine?: number;
@@ -47,7 +47,7 @@ export interface TestSourceRequest {
 
 /** Each distinct test file once, rather than one copy of its code per test. */
 export interface TestSourceFileRequest {
-  /** Workspace-relative, forward slashes. Matches `TestSourceRequest.filePath`. */
+  /** Workspace-relative, forward slashes. Matches `TestSourceRequest.path`. */
   path: string;
   /** LF-normalized. Absent when capture is off or the per-submission budget ran out. */
   content?: string;
@@ -71,8 +71,8 @@ export interface TestRunRequest {
   commitHash?: string;
   /** Normalized to a browsable HTTPS URL — never carries embedded credentials or the SSH form. */
   repoUrl?: string;
-  startedAt?: number;
-  finishedAt?: number;
+  startedAtMs?: number;
+  finishedAtMs?: number;
   results: TestResultRequest[];
   testFiles?: TestSourceFileRequest[];
   /** Present only when true. Distinguishes "capture off" from "sources could not be resolved". */

@@ -42,8 +42,8 @@ describe('buildTestRunRequest', () => {
       projectName: 'my-project',
       commitHash: 'deadbeef',
       repoUrl: 'https://github.com/org/repo',
-      startedAt: 1000,
-      finishedAt: 2000,
+      startedAtMs: 1000,
+      finishedAtMs: 2000,
       results: [
         { testSuite: 'test_calculator', testName: 'test_adds', status: 'PASSED', durationMs: 5, message: undefined },
         {
@@ -138,8 +138,8 @@ describe('buildTestRunRequest', () => {
   it('omits timing the gateway would reject', () => {
     const request = buildTestRunRequest(sampleRun({ startedAt: 2000, finishedAt: 1000 }), metadata);
 
-    expect(request.startedAt).toBeUndefined();
-    expect(request.finishedAt).toBeUndefined();
+    expect(request.startedAtMs).toBeUndefined();
+    expect(request.finishedAtMs).toBeUndefined();
   });
 });
 
@@ -175,7 +175,7 @@ describe('buildTestRunRequest — captured source', () => {
     const request = buildTestRunRequest(sampleRun(), metadata, sampleEvidence());
 
     expect(request.results[0].source).toEqual({
-      filePath: 'tests/test_calculator.py',
+      path: 'tests/test_calculator.py',
       startLine: 3,
       endLine: 4,
     });
@@ -188,7 +188,7 @@ describe('buildTestRunRequest — captured source', () => {
       sources: [{ kind: 'FILE', filePath: 'tests/test_calculator.py' }, { kind: 'NONE' }],
     });
 
-    expect(request.results[0].source).toEqual({ filePath: 'tests/test_calculator.py' });
+    expect(request.results[0].source).toEqual({ path: 'tests/test_calculator.py' });
   });
 
   it('submits no integrity signals — they exist only to drive the local warning', () => {
@@ -250,7 +250,7 @@ describe('buildTestRunRequest — captured source', () => {
 
     const request = buildTestRunRequest(sampleRun(), metadata, evidence);
 
-    expect(request.results[0].source?.filePath).toHaveLength(1024);
+    expect(request.results[0].source?.path).toHaveLength(1024);
     expect(request.testFiles?.[0].path).toHaveLength(1024);
   });
 });

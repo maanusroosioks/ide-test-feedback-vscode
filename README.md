@@ -91,7 +91,7 @@ Each run posts the results **and the test files that produced them**. Per test:
 - `testSuite`, `testName`, `status`, `durationMs`, and the failure `message`
 - `source` — where the test lives: its file path relative to the workspace folder, and the
   line range of its declaration. When a test can't be matched to a declaration only
-  `filePath` is sent; when the file can't be found at all, `source` is omitted and only the
+  `path` is sent; when the file can't be found at all, `source` is omitted and only the
   framework's own report is sent.
 
 Alongside the results, `testFiles` carries **each test file once** — its workspace-relative
@@ -129,14 +129,14 @@ What your instructor reads is the test code itself, which is the thing worth rea
 through `PARAM_TEXT` would strip those via `strip_tags`. The extension does sanitize
 `testSuite`, `testName` and `message` for `PARAM_TEXT`, since those are display fields.
 
-Join a result to its file with `source.filePath` == `testFiles[].path`, then slice
+Join a result to its file with `source.path` == `testFiles[].path`, then slice
 `startLine`..`endLine` (1-based, inclusive) out of `content`. Content is LF-normalized, and a
 `truncated` file is cut at a character boundary, so line numbers still hold for what remains.
 
 The extension keeps to the gateway's validation limits before sending: an `assignmentKey`
 of at most 100 characters from `[A-Za-z0-9_-]`, at most 5000 results and 200 test files,
 and the `@Size` limits on each text field. Past 200 files, the files are kept in path order
-and the results whose file was left out are sent with no `source`, so every `source.filePath`
+and the results whose file was left out are sent with no `source`, so every `source.path`
 always has a matching `testFiles` entry.
 
 ## Settings

@@ -167,7 +167,7 @@ describe.skipIf(!existsSync(dotnetSample))('dotnet-sample', () => {
     // Sanitized for Moodle PARAM_TEXT, but the captured code must survive verbatim.
     expect(request.testFiles?.[0].content).toContain('Assert.Throws<DivideByZeroException>');
     expect(request.results[2].source).toEqual({
-      filePath: 'CalculatorTests.cs',
+      path: 'CalculatorTests.cs',
       startLine: (evidence.payload.sources[2] as DeclaredSource).startLine,
       endLine: (evidence.payload.sources[2] as DeclaredSource).endLine,
     });

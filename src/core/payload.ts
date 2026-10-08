@@ -45,10 +45,10 @@ function durationField(durationMs: number | undefined): number | undefined {
 }
 
 /** The gateway rejects a whole run over bad timing, and timing is the least important part of it. */
-function timingFields(run: NormalizedTestRun): Pick<TestRunRequest, 'startedAt' | 'finishedAt'> {
+function timingFields(run: NormalizedTestRun): Pick<TestRunRequest, 'startedAtMs' | 'finishedAtMs'> {
   const { startedAt, finishedAt } = run;
   if (startedAt < 0 || finishedAt < startedAt) return {};
-  return { startedAt, finishedAt };
+  return { startedAtMs: startedAt, finishedAtMs: finishedAt };
 }
 
 function validateAssignmentKey(assignmentKey: string): void {
@@ -61,9 +61,9 @@ function validateAssignmentKey(assignmentKey: string): void {
 function toSourceRequest(source: TestSource): TestSourceRequest | undefined {
   if (source.kind === 'NONE') return undefined;
 
-  const filePath = truncate(source.filePath, REQUEST_LIMITS.path);
-  if (source.kind === 'FILE') return { filePath };
-  return { filePath, startLine: source.startLine, endLine: source.endLine };
+  const path = truncate(source.filePath, REQUEST_LIMITS.path);
+  if (source.kind === 'FILE') return { path };
+  return { path, startLine: source.startLine, endLine: source.endLine };
 }
 
 function toSourceFileRequest(file: TestSourceFile): TestSourceFileRequest {

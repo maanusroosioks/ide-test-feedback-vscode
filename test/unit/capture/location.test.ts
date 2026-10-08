@@ -164,6 +164,14 @@ describe('resolveTestLocation', () => {
     expect(await resolver.resolveSuiteFile('Acme.Math.CalculatorTests')).toBe(resolve(ROOT, 'src/CalculatorTests.cs'));
   });
 
+  it('finds a .NET suite in a project folder named after its dotted root namespace', async () => {
+    const resolver = resolverFor('dotnet', ['tests/Acme.Math.Tests/Unit/CalculatorTests.cs'], ['src', 'tests']);
+
+    expect(await resolver.resolveSuiteFile('Acme.Math.Tests.Unit.CalculatorTests')).toBe(
+      resolve(ROOT, 'tests/Acme.Math.Tests/Unit/CalculatorTests.cs'),
+    );
+  });
+
   it("skips only the platform's own build output when searching modules", async () => {
     const files = ['bin/src/test/java/com/pkg/FooTest.java', 'obj/src/test/java/com/pkg/FooTest.java'];
 
