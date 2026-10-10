@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { buildTestRunRequest } from '../../../src/core/payload';
 import { TestLocationResolver } from '../../../src/capture/location';
 import { collectTestEvidence, type TestEvidence } from '../../../src/capture/evidence';
+import { locateResults, SourceFileCache } from '../../../src/capture/sourceFiles';
 import { describeSuspiciousTests } from '../../../src/capture/integrity';
 import { sliceLines } from '../../../src/scanning';
 import type { NormalizedTestCase, NormalizedTestRun, Platform } from '../../../src/core/types';
@@ -19,11 +20,9 @@ const EXAMPLES = process.env.MOODLE_EXAMPLES_DIR ?? resolve(__dirname, '../../..
 const metadata = { assignmentKey: 'sample-assignment', projectName: 'sample' };
 
 async function evidenceFor(folder: string, run: NormalizedTestRun): Promise<TestEvidence> {
-  return collectTestEvidence(run, new TestLocationResolver(folder, run.platform), {
-    folderPath: folder,
-    captureSource: true,
-    maxTotalChars: 200000,
-  });
+  const resolver = new TestLocationResolver(folder, run.platform);
+  const located = await locateResults(run, resolver, new SourceFileCache(folder, run.platform));
+  return collectTestEvidence(run, located, { captureSource: true, maxTotalChars: 200000 });
 }
 
 function run(adapterId: string, platform: Platform, results: NormalizedTestCase[]): NormalizedTestRun {

@@ -1,27 +1,39 @@
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import type { AdapterRegistry } from '../../../src/runner/registry';
 import type { AuthService } from '../../../src/auth/authService';
 import { collectTestEvidence } from '../../../src/capture/evidence';
+import { TestFileFinder } from '../../../src/capture/discovery';
+import { locateResults, type SourceFileCache } from '../../../src/capture/sourceFiles';
 import { CancelledError } from '../../../src/core/errors';
 import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/submissionMetadata';
 import { submitRun } from '../../../src/core/submitRun';
 import { runTests, type RunTestsOptions } from '../../../src/core/testRunner';
 import type { NormalizedTestCase } from '../../../src/core/types';
 import type { MoodleApiClient } from '../../../src/services/moodleApiClient';
-import { registerTestController, type PerformRunOptions } from '../../../src/ui/testController';
-import type { KnownTest } from '../../../src/ui/testTree';
-import { fakeStatus, recordingLogger, testRun, writeWorkspaceConfig, type RecordingLogger } from '../helpers/fakes';
+import { RESCAN_DELAY_MS, registerTestController, type PerformRunOptions } from '../../../src/ui/testController';
+import {
+  fakeStatus,
+  recordingLogger,
+  registryWith,
+  stubAdapter,
+  testRun,
+  writeWorkspaceConfig,
+  type RecordingLogger,
+} from '../helpers/fakes';
 import { tempDir, writeTree } from '../helpers/fs';
 import {
+  Range,
   TestMessage,
   TestRunProfileKind,
   TestRunRequest,
+  Uri,
   asContext,
   configValues,
   fakeExtensionContext,
+  fireFileEvent,
   tests,
   window,
   workspace,
@@ -36,6 +48,10 @@ vi.mock('../../../src/core/submitRun', () => ({ submitRun: vi.fn() }));
 vi.mock('../../../src/capture/evidence', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/capture/evidence')>();
   return { ...actual, collectTestEvidence: vi.fn(actual.collectTestEvidence) };
+});
+vi.mock('../../../src/capture/sourceFiles', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/capture/sourceFiles')>();
+  return { ...actual, locateResults: vi.fn(actual.locateResults) };
 });
 
 const KNOWN_TESTS_KEY = 'moodleSubmit.knownTests';
@@ -62,23 +78,28 @@ beforeEach(async () => {
   vi.mocked(runTests).mockReset();
   vi.mocked(submitRun).mockReset();
   vi.mocked(collectTestEvidence).mockClear();
+  vi.mocked(locateResults).mockClear();
 
   folderPath = await tempDir();
   testFile = join(folderPath, 'tests', 'test_math.py');
   await writeTree(folderPath, { 'tests/test_math.py': TEST_FILE });
   await writeWorkspaceConfig(folderPath, { assignmentKey: 'assignment-7' });
   workspace.workspaceFolders = [workspaceFolder(folderPath, 'calculator')];
+  workspace.getWorkspaceFolder.mockImplementation((uri) =>
+    workspace.workspaceFolders?.find((folder) => uri.fsPath.startsWith(folder.uri.fsPath)),
+  );
   configValues.set('serviceUrl', 'https://bridge.example.edu');
 
   context = fakeExtensionContext();
   logger = recordingLogger();
 });
 
-function setup() {
+/** The registry only feeds discovery here: `runTests` is mocked. */
+function setup(registry: AdapterRegistry = registryWith(stubAdapter('pytest'))) {
   const status = fakeStatus();
   const authService = { getAccessToken: vi.fn(async () => 'token-abc') };
   const control = registerTestController(asContext(context), {
-    registry: {} as AdapterRegistry,
+    registry,
     authService: authService as unknown as AuthService,
     apiClient: {} as MoodleApiClient,
     logger,
@@ -105,19 +126,38 @@ function performRun(control: ReturnType<typeof setup>['control'], options: Parti
   return control.performRun({ folder: workspace.workspaceFolders![0], submit: false, ...options });
 }
 
-const suiteId = (suite = SUITE): string => `${folderPath}::${suite}`;
-const testId = (name: string, suite = SUITE): string => `${folderPath}::${suite}::${name}`;
+const TEST_PATH = 'tests/test_math.py';
+
+const fileId = (relativePath = TEST_PATH): string => `${folderPath}::/${relativePath}`;
+const declId = (name: string, relativePath = TEST_PATH): string => `${fileId(relativePath)}::::${name}`;
+const resultId = (parentId: string, name: string): string => `${parentId}::run:${name}`;
+const suiteId = (suite: string): string => `${folderPath}::${suite}`;
+const suiteTestId = (name: string, suite: string): string => `${folderPath}::${suite}::${name}`;
 
 function folderNode(controller: FakeTestController): FakeTestItem {
   return controller.items.get(folderPath)!;
 }
 
-function suiteNode(controller: FakeTestController, suite = SUITE): FakeTestItem | undefined {
+function fileNode(controller: FakeTestController, relativePath = TEST_PATH): FakeTestItem | undefined {
+  return folderNode(controller).children.get(fileId(relativePath));
+}
+
+function testNode(controller: FakeTestController, name: string, relativePath = TEST_PATH): FakeTestItem | undefined {
+  return fileNode(controller, relativePath)?.children.get(declId(name, relativePath));
+}
+
+function suiteNode(controller: FakeTestController, suite: string): FakeTestItem | undefined {
   return folderNode(controller).children.get(suiteId(suite));
 }
 
-function testNode(controller: FakeTestController, name: string, suite = SUITE): FakeTestItem | undefined {
-  return suiteNode(controller, suite)?.children.get(testId(name, suite));
+/** What VS Code does when the Testing view first needs the tree. */
+async function discover(controller: FakeTestController): Promise<void> {
+  await controller.resolveHandler?.(undefined);
+}
+
+/** Long enough for a debounced rescan to have run, for asserting that it changed nothing. */
+function rescanSettled(): Promise<void> {
+  return new Promise((resolveWait) => setTimeout(resolveWait, RESCAN_DELAY_MS + 100));
 }
 
 const PASSING: NormalizedTestCase[] = [
@@ -135,7 +175,7 @@ describe('registerTestController — tree', () => {
     ]);
   });
 
-  it('shows each workspace folder as a placeholder until its first run', () => {
+  it('shows each workspace folder as a placeholder until its tests are discovered', () => {
     const { controller } = setup();
 
     const root = folderNode(controller);
@@ -144,24 +184,83 @@ describe('registerTestController — tree', () => {
     expect(root.children.size).toBe(0);
   });
 
-  it('restores the tests remembered from an earlier session', async () => {
-    const remembered: KnownTest[] = [
-      { suite: SUITE, name: 'test_add', file: testFile },
-      { suite: SUITE, name: 'test_subtract' },
-      { suite: 'com.example.OtherTest', name: 'works' },
-    ];
-    await context.workspaceState.update(KNOWN_TESTS_KEY, { [folderPath]: remembered });
-
+  it('discovers the tests declared in the source when the Testing view asks for them', async () => {
     const { controller } = setup();
 
+    await discover(controller);
+
     expect(folderNode(controller).description).toBeUndefined();
-    expect(suiteNode(controller)?.label).toBe('test_math');
-    expect(suiteNode(controller)?.description).toBe(SUITE);
-    expect(suiteNode(controller)?.uri?.fsPath).toBe(testFile);
-    expect(suiteNode(controller)?.children.ids()).toEqual([testId('test_add'), testId('test_subtract')]);
+    const file = fileNode(controller);
+    expect(file?.label).toBe('test_math.py');
+    expect(file?.description).toBe('tests');
+    expect(file?.uri?.fsPath).toBe(testFile);
+    expect(file?.children.ids()).toEqual([declId('test_add'), declId('test_subtract'), declId('test_emptied')]);
     expect(testNode(controller, 'test_add')?.uri?.fsPath).toBe(testFile);
-    expect(testNode(controller, 'test_subtract')?.uri).toBeUndefined();
-    expect(suiteNode(controller, 'com.example.OtherTest')?.uri).toBeUndefined();
+    expect(testNode(controller, 'test_add')?.range).toEqual(new Range(0, 0, 1, '    assert 1 + 1 == 2'.length));
+    expect(testNode(controller, 'test_subtract')?.range?.startLine).toBe(4);
+  });
+
+  it('nests a test under each class it is declared in, except one named after its file', async () => {
+    await writeTree(folderPath, {
+      'src/test/java/CalculatorTest.java': [
+        'class CalculatorTest {',
+        '  @Test void adds() {}',
+        '  @Nested class Division {',
+        '    @Test void divides() {}',
+        '  }',
+        '}',
+      ].join('\n'),
+    });
+    const { controller } = setup(registryWith(stubAdapter('maven-junit', { platform: 'jvm' })));
+
+    await discover(controller);
+
+    const javaFile = 'src/test/java/CalculatorTest.java';
+    const file = fileNode(controller, javaFile)!;
+    const nested = file.children.get(`${fileId(javaFile)}::CalculatorTest.Division`);
+    expect(file.children.ids()).toEqual([
+      `${fileId(javaFile)}::CalculatorTest::adds`,
+      `${fileId(javaFile)}::CalculatorTest.Division`,
+    ]);
+    expect(nested?.label).toBe('Division');
+    expect(nested?.children.ids()).toEqual([`${fileId(javaFile)}::CalculatorTest.Division::divides`]);
+  });
+
+  it('tells apart two tests declared under the same name by their order', async () => {
+    await writeTree(folderPath, {
+      [TEST_PATH]: 'def test_twice():\n    assert True\n\ndef test_twice():\n    assert False\n',
+    });
+    const { controller } = setup();
+
+    await discover(controller);
+
+    expect(fileNode(controller)?.children.ids()).toEqual([declId('test_twice'), `${declId('test_twice')}#2`]);
+  });
+
+  it('keeps the placeholder for a folder with no tests to discover', async () => {
+    await rm(join(folderPath, 'tests'), { recursive: true });
+    const { controller } = setup();
+
+    await discover(controller);
+
+    expect(folderNode(controller).description).toBe('run to discover tests');
+    expect(folderNode(controller).children.size).toBe(0);
+  });
+
+  it('discovers nothing in a folder no test adapter recognises', async () => {
+    const { controller } = setup(registryWith());
+
+    await discover(controller);
+
+    expect(folderNode(controller).children.size).toBe(0);
+  });
+
+  it('clears the test list that versions before discovery remembered', async () => {
+    await context.workspaceState.update(KNOWN_TESTS_KEY, { [folderPath]: [{ suite: SUITE, name: 'test_add' }] });
+
+    setup();
+
+    expect(context.workspaceState.get(KNOWN_TESTS_KEY)).toBeUndefined();
   });
 
   it('follows workspace folders being added and removed', async () => {
@@ -174,10 +273,178 @@ describe('registerTestController — tree', () => {
 
     expect(controller.items.ids()).toEqual([other]);
   });
+
+  it('discovers the tests of a folder added once discovery has started', async () => {
+    const { controller } = setup();
+    await discover(controller);
+    const other = await tempDir();
+    await writeTree(other, { 'test_other.py': 'def test_it():\n    assert True\n' });
+
+    workspace.workspaceFolders = [...workspace.workspaceFolders!, workspaceFolder(other, 'other', 1)];
+    workspace.onDidChangeWorkspaceFolders.mock.calls[0][0]();
+
+    await vi.waitFor(() => expect(controller.items.get(other)?.children.ids()).toEqual([`${other}::/test_other.py`]));
+  });
+});
+
+describe('registerTestController — keeping up with edits', () => {
+  it('adds a test as soon as its file is saved', async () => {
+    const { controller } = setup();
+    await discover(controller);
+
+    await writeTree(folderPath, { [TEST_PATH]: `${TEST_FILE}\n\ndef test_multiply():\n    assert 2 * 3 == 6\n` });
+    fireFileEvent('change', testFile);
+
+    await vi.waitFor(() => expect(testNode(controller, 'test_multiply')).toBeDefined());
+    expect(fileNode(controller)?.children.size).toBe(4);
+  });
+
+  it('drops a test removed from its file, and the file once it holds none', async () => {
+    const { controller } = setup();
+    await discover(controller);
+
+    await writeTree(folderPath, { [TEST_PATH]: 'def test_add():\n    assert 1 + 1 == 2\n' });
+    fireFileEvent('change', testFile);
+    await vi.waitFor(() => expect(fileNode(controller)?.children.ids()).toEqual([declId('test_add')]));
+
+    await writeTree(folderPath, { [TEST_PATH]: 'def helper():\n    return 1\n' });
+    fireFileEvent('change', testFile);
+    await vi.waitFor(() => expect(fileNode(controller)).toBeUndefined());
+    expect(folderNode(controller).description).toBe('run to discover tests');
+  });
+
+  it('picks up a new test file', async () => {
+    const { controller } = setup();
+    await discover(controller);
+
+    await writeTree(folderPath, { 'tests/test_new.py': 'def test_it():\n    assert True\n' });
+    fireFileEvent('create', join(folderPath, 'tests', 'test_new.py'));
+
+    await vi.waitFor(() => expect(testNode(controller, 'test_it', 'tests/test_new.py')).toBeDefined());
+  });
+
+  it('ignores a new file that is not a test file, however test-like its contents', async () => {
+    const { controller } = setup();
+    await discover(controller);
+
+    await writeTree(folderPath, { 'helpers.py': 'def test_helper():\n    return 1\n' });
+    fireFileEvent('create', join(folderPath, 'helpers.py'));
+    await rescanSettled();
+
+    expect(folderNode(controller).children.ids()).toEqual([fileId()]);
+  });
+
+  it('removes a deleted test file, and every test file under a deleted folder', async () => {
+    await writeTree(folderPath, { 'other/test_other.py': 'def test_it():\n    assert True\n' });
+    const { controller } = setup();
+    await discover(controller);
+    expect(folderNode(controller).children.size).toBe(2);
+
+    fireFileEvent('delete', join(folderPath, 'other', 'test_other.py'));
+    expect(folderNode(controller).children.ids()).toEqual([fileId()]);
+
+    fireFileEvent('delete', join(folderPath, 'tests'));
+    expect(folderNode(controller).children.size).toBe(0);
+    expect(folderNode(controller).description).toBe('run to discover tests');
+  });
+
+  it('scans a test file when it is opened, without the Testing view', async () => {
+    const { controller } = setup();
+    const onOpened = workspace.onDidOpenTextDocument.mock.calls[0][0];
+
+    onOpened({ uri: Uri.file(testFile) });
+
+    await vi.waitFor(() => expect(testNode(controller, 'test_add')).toBeDefined());
+  });
+
+  it('scans the test files already open at startup', async () => {
+    workspace.textDocuments = [{ uri: Uri.file(testFile) }];
+
+    const { controller } = setup();
+
+    await vi.waitFor(() => expect(testNode(controller, 'test_add')).toBeDefined());
+  });
+
+  it('finds the tests in a renamed folder, which reports only the folder itself', async () => {
+    const { controller } = setup();
+    await discover(controller);
+
+    await rename(join(folderPath, 'tests'), join(folderPath, 'spec'));
+    fireFileEvent('delete', join(folderPath, 'tests'));
+    fireFileEvent('create', join(folderPath, 'spec'));
+
+    await vi.waitFor(() => expect(testNode(controller, 'test_add', 'spec/test_math.py')).toBeDefined());
+    expect(fileNode(controller)).toBeUndefined();
+  });
+
+  it('keeps a file that a rescan added while a slower discovery was still walking', async () => {
+    const { controller } = setup();
+    const original = TestFileFinder.prototype.discover;
+    let walkDone = (): void => {};
+    const walkFinished = new Promise<void>((resolveWalk) => (walkDone = resolveWalk));
+    let release = (): void => {};
+    const released = new Promise<void>((resolveRelease) => (release = resolveRelease));
+    const spy = vi
+      .spyOn(TestFileFinder.prototype, 'discover')
+      .mockImplementationOnce(async function (this: TestFileFinder, files: SourceFileCache) {
+        const found = await original.call(this, files);
+        walkDone();
+        await released;
+        return found;
+      });
+
+    try {
+      const discovering = discover(controller);
+      await walkFinished;
+      // Too late for the walk to see: only the rescan can add it.
+      await writeTree(folderPath, { 'tests/test_new.py': 'def test_it():\n    assert True\n' });
+      fireFileEvent('create', join(folderPath, 'tests', 'test_new.py'));
+      await vi.waitFor(() => expect(fileNode(controller, 'tests/test_new.py')).toBeDefined());
+
+      release();
+      await discovering;
+
+      expect(fileNode(controller, 'tests/test_new.py')).toBeDefined();
+      expect(fileNode(controller)).toBeDefined();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('finds the tests once the folder gains the build file that identifies it', async () => {
+    const detect = vi.fn(async () => false);
+    const { controller } = setup(registryWith(stubAdapter('pytest', { detect })));
+    await discover(controller);
+    expect(folderNode(controller).children.size).toBe(0);
+
+    detect.mockResolvedValue(true);
+    fireFileEvent('change', testFile);
+
+    await vi.waitFor(() => expect(testNode(controller, 'test_add')).toBeDefined());
+  });
+
+  it('keeps a test file only a run could find up to date, and through rediscovery', async () => {
+    // Named for a custom `python_files`, so discovery alone never looks at it.
+    const checkFile = join(folderPath, 'tests', 'check_math.py');
+    await writeTree(folderPath, { 'tests/check_math.py': 'def test_it():\n    assert True\n' });
+    const { control, controller } = setup();
+    testsRan([{ testSuite: 'tests.check_math', testName: 'test_it', status: 'PASSED' }]);
+    await performRun(control);
+    expect(testNode(controller, 'test_it', 'tests/check_math.py')).toBeDefined();
+
+    await writeTree(folderPath, {
+      'tests/check_math.py': 'def test_it():\n    assert True\n\n\ndef test_more():\n    assert True\n',
+    });
+    fireFileEvent('change', checkFile);
+    await vi.waitFor(() => expect(testNode(controller, 'test_more', 'tests/check_math.py')).toBeDefined());
+
+    await discover(controller);
+    expect(fileNode(controller, 'tests/check_math.py')).toBeDefined();
+  });
 });
 
 describe('performRun — results', () => {
-  it('reports each outcome against an item under folder › suite › test', async () => {
+  it('reports each outcome against the test declared in the source', async () => {
     const { control, controller } = setup();
     testsRan([
       { testSuite: SUITE, testName: 'test_add', status: 'PASSED', durationMs: 3 },
@@ -198,9 +465,11 @@ describe('performRun — results', () => {
     const [run] = controller.runs;
     expect(run.name).toBe('Run Tests');
     expect(run.startedIds).toHaveLength(4);
-    expect(run.outcomes.get(testId('test_add'))).toEqual({ status: 'passed', durationMs: 3 });
-    expect(run.outcomes.get(testId('test_emptied'))).toEqual({ status: 'skipped' });
-    expect(run.outcomes.get(testId('test_broken'))).toMatchObject({
+    expect(run.outcomes.get(declId('test_add'))).toEqual({ status: 'passed', durationMs: 3 });
+    expect(run.outcomes.get(declId('test_subtract'))?.status).toBe('failed');
+    expect(run.outcomes.get(declId('test_emptied'))).toEqual({ status: 'skipped' });
+    // Ran, but declared nowhere in the file it was traced to.
+    expect(run.outcomes.get(resultId(fileId(), 'test_broken'))).toMatchObject({
       status: 'errored',
       message: new TestMessage('ERROR with no reported message.'),
     });
@@ -208,7 +477,16 @@ describe('performRun — results', () => {
     expect(folderNode(controller).description).toBeUndefined();
   });
 
-  it('shows the worse outcome when one name is reported twice in a suite', async () => {
+  it('gives a passing test the line of its declaration', async () => {
+    const { control, controller } = setup();
+    testsRan(PASSING);
+
+    await performRun(control);
+
+    expect(testNode(controller, 'test_add')?.range?.startLine).toBe(0);
+  });
+
+  it('shows the worse outcome when one name is reported twice', async () => {
     const { control, controller } = setup();
     testsRan([
       { testSuite: SUITE, testName: 'test_add', status: 'FAILED', message: 'assert 1 == 2' },
@@ -220,13 +498,11 @@ describe('performRun — results', () => {
     await performRun(control);
 
     const [run] = controller.runs;
-    expect(run.outcomes.get(testId('test_add'))?.status).toBe('failed');
-    expect(run.outcomes.get(testId('test_sub'))?.status).toBe('errored');
-    const remembered = context.workspaceState.get<Record<string, KnownTest[]>>('moodleSubmit.knownTests')!;
-    expect(remembered[folderPath].map((test) => test.name)).toEqual(['test_add', 'test_sub']);
+    expect(run.outcomes.get(declId('test_add'))?.status).toBe('failed');
+    expect(run.outcomes.get(resultId(fileId(), 'test_sub'))?.status).toBe('errored');
   });
 
-  it('points a failure at the line from its stack trace', async () => {
+  it('points a failure message at the line from its stack trace', async () => {
     const { control, controller } = setup();
     testsRan([
       {
@@ -240,72 +516,150 @@ describe('performRun — results', () => {
 
     await performRun(control);
 
-    const outcome = controller.runs[0].outcomes.get(testId('test_subtract'));
+    const outcome = controller.runs[0].outcomes.get(declId('test_subtract'));
     expect(outcome?.status).toBe('failed');
     const message = (outcome as { message: TestMessage }).message;
     expect(message.message).toBe('assert 2 == 1\n\ntests/test_math.py:6: AssertionError');
     expect(message.location?.uri.fsPath).toBe(testFile);
     expect(message.location?.range.startLine).toBe(5);
 
-    const item = testNode(controller, 'test_subtract');
-    expect(item?.uri?.fsPath).toBe(testFile);
-    expect(item?.range?.startLine).toBe(5);
+    // The test itself keeps the line it is declared on.
+    expect(testNode(controller, 'test_subtract')?.range?.startLine).toBe(4);
   });
 
-  it('prunes tests and suites that no longer ran', async () => {
+  it('shows each case of a parameterized test under the test', async () => {
     const { control, controller } = setup();
     testsRan([
-      { testSuite: SUITE, testName: 'test_add', status: 'PASSED' },
-      { testSuite: SUITE, testName: 'test_subtract', status: 'PASSED' },
-      { testSuite: 'tests.test_old', testName: 'test_gone', status: 'PASSED' },
+      { testSuite: SUITE, testName: 'test_add[1-2]', status: 'PASSED' },
+      { testSuite: SUITE, testName: 'test_add[2-3]', status: 'FAILED', message: 'assert 5 == 6' },
+    ]);
+
+    await performRun(control);
+
+    const declared = testNode(controller, 'test_add')!;
+    const cases = [resultId(declared.id, 'test_add[1-2]'), resultId(declared.id, 'test_add[2-3]')];
+    expect(declared.children.ids()).toEqual(cases);
+    expect(declared.children.get(cases[0])?.label).toBe('test_add[1-2]');
+    expect(declared.children.get(cases[0])?.range).toEqual(declared.range);
+    expect(controller.runs[0].outcomes.get(cases[0])?.status).toBe('passed');
+    expect(controller.runs[0].outcomes.get(cases[1])?.status).toBe('failed');
+  });
+
+  it('reports on the test itself again once it runs under one name', async () => {
+    const { control, controller } = setup();
+    testsRan([
+      { testSuite: SUITE, testName: 'test_add[1-2]', status: 'PASSED' },
+      { testSuite: SUITE, testName: 'test_add[2-3]', status: 'PASSED' },
     ]);
     await performRun(control);
 
     testsRan(PASSING);
     await performRun(control);
 
-    expect(folderNode(controller).children.ids()).toEqual([suiteId()]);
-    expect(suiteNode(controller)?.children.ids()).toEqual([testId('test_add')]);
+    expect(testNode(controller, 'test_add')?.children.size).toBe(0);
+    expect(controller.runs[1].outcomes.get(declId('test_add'))?.status).toBe('passed');
   });
 
-  it('groups results without a suite under a placeholder suite', async () => {
+  it('moves the cases of a parameterized test along with it when its file is edited', async () => {
+    const { control, controller } = setup();
+    testsRan([
+      { testSuite: SUITE, testName: 'test_add[1-2]', status: 'PASSED' },
+      { testSuite: SUITE, testName: 'test_add[2-3]', status: 'PASSED' },
+    ]);
+    await performRun(control);
+
+    await writeTree(folderPath, { [TEST_PATH]: `import math\n\n\n${TEST_FILE}` });
+    fireFileEvent('change', testFile);
+
+    await vi.waitFor(() => expect(testNode(controller, 'test_add')?.range?.startLine).toBe(3));
+    const declared = testNode(controller, 'test_add')!;
+    expect(declared.children.size).toBe(2);
+    declared.children.forEach((child) => expect(child.range).toEqual(declared.range));
+  });
+
+  it('tells apart the runs of a test inherited by several suites', async () => {
+    const { control, controller } = setup();
+    testsRan([
+      { testSuite: SUITE, testName: 'test_add', status: 'PASSED' },
+      {
+        testSuite: 'tests.test_other',
+        testName: 'test_add',
+        status: 'FAILED',
+        message: 'assert 1 == 2',
+        stackTrace: 'tests/test_math.py:2: AssertionError',
+      },
+    ]);
+
+    await performRun(control);
+
+    const declared = testNode(controller, 'test_add')!;
+    const runs = [resultId(declared.id, `${SUITE}::test_add`), resultId(declared.id, 'tests.test_other::test_add')];
+    expect(declared.children.ids()).toEqual(runs);
+    expect(declared.children.get(runs[0])?.description).toBe('test_math');
+    expect(declared.children.get(runs[1])?.description).toBe('test_other');
+    expect(controller.runs[0].outcomes.get(runs[0])?.status).toBe('passed');
+    expect(controller.runs[0].outcomes.get(runs[1])?.status).toBe('failed');
+  });
+
+  it('still shows and submits the results when tracing them to the source fails', async () => {
+    const { control, controller } = setup();
+    testsRan(PASSING);
+    vi.mocked(locateResults).mockRejectedValueOnce(new Error('scanner bug'));
+
+    await performRun(control, { submit: true });
+
+    expect(logger.messages).toContain('Could not trace the results to the source: scanner bug');
+    expect(controller.runs[0].outcomes.get(suiteTestId('test_add', SUITE))?.status).toBe('passed');
+    // No evidence rather than evidence claiming every test is missing, which would warn of tampering.
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(submitRun).toHaveBeenCalledOnce();
+    expect(vi.mocked(submitRun).mock.calls[0][1].evidence).toBeUndefined();
+  });
+
+  it('keeps declared tests that did not run, but drops results that no longer ran', async () => {
+    const { control, controller } = setup();
+    testsRan([
+      { testSuite: SUITE, testName: 'test_add', status: 'PASSED' },
+      { testSuite: SUITE, testName: 'test_broken', status: 'PASSED' },
+      { testSuite: 'tests.test_old', testName: 'test_gone', status: 'PASSED' },
+    ]);
+    await performRun(control);
+    expect(folderNode(controller).children.ids()).toEqual([fileId(), suiteId('tests.test_old')]);
+
+    testsRan(PASSING);
+    await performRun(control);
+
+    expect(folderNode(controller).children.ids()).toEqual([fileId()]);
+    expect(fileNode(controller)?.children.ids()).toEqual([
+      declId('test_add'),
+      declId('test_subtract'),
+      declId('test_emptied'),
+    ]);
+  });
+
+  it('groups results traced to no file under the suite the report names', async () => {
     const { control, controller } = setup();
     testsRan([{ testName: 'lonely', status: 'PASSED' }]);
 
     await performRun(control);
 
-    expect(suiteNode(controller, '(no suite)')?.children.ids()).toEqual([testId('lonely', '(no suite)')]);
+    expect(suiteNode(controller, '(no suite)')?.children.ids()).toEqual([suiteTestId('lonely', '(no suite)')]);
   });
 
-  it('picks up a test file that appeared since the last run', async () => {
+  it('moves a result into its file once the file appears', async () => {
     const { control, controller } = setup();
     const suite = 'tests.test_new';
     testsRan([{ testSuite: suite, testName: 'test_it', status: 'PASSED' }]);
     await performRun(control);
-    expect(testNode(controller, 'test_it', suite)?.uri).toBeUndefined();
+    expect(suiteNode(controller, suite)?.children.ids()).toEqual([suiteTestId('test_it', suite)]);
 
     await writeTree(folderPath, { 'tests/test_new.py': 'def test_it():\n    assert True\n' });
     await performRun(control);
 
-    expect(testNode(controller, 'test_it', suite)?.uri?.fsPath).toBe(join(folderPath, 'tests', 'test_new.py'));
-    expect(suiteNode(controller, suite)?.children.size).toBe(1);
-  });
-
-  it('remembers the tests so the tree survives a reload', async () => {
-    const { control } = setup();
-    testsRan([
-      { testSuite: SUITE, testName: 'test_add', status: 'PASSED' },
-      { testSuite: 'tests.test_missing', testName: 'test_x', status: 'PASSED' },
-    ]);
-
-    await performRun(control);
-
-    expect(context.workspaceState.get(KNOWN_TESTS_KEY)).toEqual({
-      [folderPath]: [
-        { suite: SUITE, name: 'test_add', file: testFile },
-        { suite: 'tests.test_missing', name: 'test_x', file: undefined },
-      ],
-    });
+    expect(testNode(controller, 'test_it', 'tests/test_new.py')?.uri?.fsPath).toBe(
+      join(folderPath, 'tests', 'test_new.py'),
+    );
+    expect(suiteNode(controller, suite)).toBeUndefined();
   });
 
   it('streams tool output into the run with CRLF line endings', async () => {
@@ -561,7 +915,9 @@ describe('performRun — submitting', () => {
   it('still submits, without evidence, when source capture fails', async () => {
     const { control } = setup();
     testsRan(PASSING);
-    vi.mocked(collectTestEvidence).mockRejectedValueOnce(new Error('disk on fire'));
+    vi.mocked(collectTestEvidence).mockImplementationOnce(() => {
+      throw new Error('disk on fire');
+    });
 
     await performRun(control, { submit: true });
 
@@ -691,7 +1047,7 @@ describe('run profile and folderFor', () => {
     await populate(control);
 
     expect(control.folderFor(testNode(controller, 'test_add'))?.name).toBe('calculator');
-    expect(control.folderFor(suiteNode(controller))?.name).toBe('calculator');
+    expect(control.folderFor(fileNode(controller))?.name).toBe('calculator');
     expect(control.folderFor(folderNode(controller))?.name).toBe('calculator');
   });
 

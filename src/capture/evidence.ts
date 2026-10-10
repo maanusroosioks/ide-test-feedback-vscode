@@ -1,14 +1,10 @@
-import { readFile } from 'node:fs/promises';
-import { basename, isAbsolute, relative, sep } from 'node:path';
-import type { TestLocationResolver } from './location';
 import {
   analyzeDeclaration,
   unlocatedIntegrity,
   type TestIntegrity,
   type TestIntegrityEntry,
 } from './integrity';
-import { languageForFile, scanTestDeclarations, type SourceLanguage } from '../ecosystems';
-import { matchDeclaration, type TestDeclaration } from '../scanning';
+import type { LocatedResult, SourceFile } from './sourceFiles';
 import type { NormalizedTestRun } from '../core/types';
 import { REQUEST_LIMITS } from '../services/httpTypes';
 
@@ -63,29 +59,8 @@ export interface TestEvidence {
 }
 
 export interface CaptureOptions {
-  folderPath: string;
   captureSource: boolean;
   maxTotalChars: number;
-  readFile?: (path: string) => Promise<string>;
-}
-
-interface SourceFile {
-  relativePath: string;
-  text: string;
-  language: SourceLanguage;
-  declarations: TestDeclaration[];
-}
-
-function toLf(text: string): string {
-  return text.replace(/\r\n/g, '\n');
-}
-
-function toRelative(folderPath: string, absolutePath: string): string {
-  const path = relative(folderPath, absolutePath);
-  if (!path || path.startsWith('..') || isAbsolute(path)) {
-    return basename(absolutePath);
-  }
-  return path.split(sep).join('/');
 }
 
 function truncationNotice(removed: number): string {
@@ -103,75 +78,43 @@ function capText(text: string, limit: number): { text: string; truncated: boolea
   return { text: `${text.slice(0, limit)}${truncationNotice(removed)}`, truncated: true };
 }
 
-export async function collectTestEvidence(
+/** `located` is index-aligned with `run.results`, as `locateResults` returns it. */
+export function collectTestEvidence(
   run: NormalizedTestRun,
-  resolver: TestLocationResolver,
+  located: LocatedResult[],
   options: CaptureOptions,
-): Promise<TestEvidence> {
-  const read = options.readFile ?? ((path: string): Promise<string> => readFile(path, 'utf8'));
-  const loaded = new Map<string, SourceFile | undefined>();
+): TestEvidence {
   const sources: TestSource[] = [];
   const integrity: TestIntegrityEntry[] = [];
 
-  // One read and one scan per file per run, however many of its tests ran.
-  const loadFile = async (absolutePath: string): Promise<SourceFile | undefined> => {
-    if (loaded.has(absolutePath)) return loaded.get(absolutePath);
-
-    let file: SourceFile | undefined;
-    try {
-      const text = toLf(await read(absolutePath));
-      const language = languageForFile(absolutePath, run.platform);
-      file = {
-        relativePath: toRelative(options.folderPath, absolutePath),
-        text,
-        language,
-        declarations: scanTestDeclarations(text, language),
-      };
-    } catch {
-      file = undefined;
-    }
-    loaded.set(absolutePath, file);
-    return file;
-  };
-
-  for (const testCase of run.results) {
+  run.results.forEach((testCase, index) => {
     const record = (source: TestSource, signals: TestIntegrity): void => {
       sources.push(source);
       integrity.push({ testSuite: testCase.testSuite, testName: testCase.testName, integrity: signals });
     };
 
-    const location = await resolver.resolveTestLocation(testCase.testSuite, testCase.stackTrace);
-    const file = location ? await loadFile(location.file) : undefined;
+    const { file, declaration } = located[index] ?? {};
     if (!file) {
       record({ kind: 'NONE' }, unlocatedIntegrity());
-      continue;
-    }
-
-    const declaration = matchDeclaration(
-      file.declarations,
-      testCase.testName,
-      testCase.testSuite,
-      location?.line,
-    );
-    if (!declaration) {
+    } else if (!declaration) {
       record({ kind: 'FILE', filePath: file.relativePath }, unlocatedIntegrity());
-      continue;
+    } else {
+      record(
+        {
+          kind: 'TEST',
+          filePath: file.relativePath,
+          startLine: declaration.startLine,
+          endLine: declaration.endLine,
+        },
+        analyzeDeclaration(declaration, file.language),
+      );
     }
-    record(
-      {
-        kind: 'TEST',
-        filePath: file.relativePath,
-        startLine: declaration.startLine,
-        endLine: declaration.endLine,
-      },
-      analyzeDeclaration(declaration, file.language),
-    );
-  }
+  });
 
   // Sorted before the budget is charged, so which files keep their content does not depend on
   // the order the tests ran in.
-  const sourceFiles = [...loaded.values()]
-    .filter((file): file is SourceFile => file !== undefined)
+  const distinct = new Set(located.flatMap((entry): SourceFile[] => (entry.file ? [entry.file] : [])));
+  const sourceFiles = [...distinct]
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
     .slice(0, REQUEST_LIMITS.testFiles);
 

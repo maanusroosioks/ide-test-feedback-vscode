@@ -92,6 +92,7 @@ export interface FakeTestItem {
   parent?: FakeTestItem;
   description?: string;
   range?: Range;
+  canResolveChildren?: boolean;
   children: FakeTestItemCollection;
 }
 
@@ -187,6 +188,8 @@ export class FakeTestController {
   readonly runs: FakeTestRun[] = [];
   readonly profiles: FakeRunProfile[] = [];
   readonly dispose = vi.fn();
+  /** VS Code calls this with no item when the Testing view first needs the tree. */
+  resolveHandler?: (item: FakeTestItem | undefined) => Promise<void> | void;
 
   constructor(
     readonly id: string,
@@ -272,8 +275,64 @@ export const window = {
   ),
 };
 
+type UriListener = (uri: Uri) => void;
+type FileEvent = 'create' | 'change' | 'delete';
+type Subscribe = (listener: UriListener) => { dispose(): void };
+
+/** Fire its events to simulate files changing on disk. */
+export class FakeFileSystemWatcher {
+  private readonly listeners: Record<FileEvent, Set<UriListener>> = {
+    create: new Set(),
+    change: new Set(),
+    delete: new Set(),
+  };
+  readonly dispose = vi.fn();
+  readonly onDidCreate: Subscribe;
+  readonly onDidChange: Subscribe;
+  readonly onDidDelete: Subscribe;
+
+  constructor(
+    readonly pattern: string,
+    ignoreCreate = false,
+    ignoreChange = false,
+    ignoreDelete = false,
+  ) {
+    this.onDidCreate = this.subscribe('create', ignoreCreate);
+    this.onDidChange = this.subscribe('change', ignoreChange);
+    this.onDidDelete = this.subscribe('delete', ignoreDelete);
+  }
+
+  private subscribe(kind: FileEvent, ignored: boolean): Subscribe {
+    return (listener) => {
+      if (!ignored) this.listeners[kind].add(listener);
+      return { dispose: () => this.listeners[kind].delete(listener) };
+    };
+  }
+
+  fire(kind: FileEvent, fsPath: string): void {
+    this.listeners[kind].forEach((listener) => listener(Uri.file(fsPath)));
+  }
+}
+
+/** Every watcher `workspace.createFileSystemWatcher` handed out since the last reset. */
+export const fileWatchers: FakeFileSystemWatcher[] = [];
+
+/** Fires `kind` on every watcher, as VS Code would for each one whose pattern matches. */
+export function fireFileEvent(kind: FileEvent, fsPath: string): void {
+  fileWatchers.forEach((watcher) => watcher.fire(kind, fsPath));
+}
+
 export const workspace = {
   workspaceFolders: undefined as vscode.WorkspaceFolder[] | undefined,
+  textDocuments: [] as { uri: Uri }[],
+  createFileSystemWatcher: stubFn(
+    (pattern: string, ignoreCreate?: boolean, ignoreChange?: boolean, ignoreDelete?: boolean): FakeFileSystemWatcher => {
+      const watcher = new FakeFileSystemWatcher(pattern, ignoreCreate, ignoreChange, ignoreDelete);
+      fileWatchers.push(watcher);
+      return watcher;
+    },
+  ),
+  onDidOpenTextDocument: stubFn((_listener: (document: { uri: Uri }) => void) => disposable()),
   getConfiguration: stubFn((_section?: string, _scope?: Uri) => ({
     get: <T>(key: string, fallback?: T): T | undefined =>
       configValues.has(key) ? (configValues.get(key) as T) : fallback,
@@ -316,6 +375,8 @@ export function resetVscodeStub(): void {
   progress.cancel = () => {};
   window.activeTextEditor = undefined;
   workspace.workspaceFolders = undefined;
+  workspace.textDocuments = [];
+  fileWatchers.length = 0;
 }
 
 export function workspaceFolder(fsPath: string, name = fsPath, index = 0): vscode.WorkspaceFolder {

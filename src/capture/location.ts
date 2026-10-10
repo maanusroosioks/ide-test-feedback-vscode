@@ -16,18 +16,19 @@ export type ExistsFn = (path: string) => Promise<boolean>;
 export type ListDirsFn = (path: string) => Promise<string[]>;
 
 /** Every platform's; each profile adds its own. Hidden folders are skipped too. */
-const SHARED_IGNORED_DIRS = ['node_modules', 'dist', 'out'];
+export const SHARED_IGNORED_DIRS = ['node_modules', 'dist', 'out'];
 
 function hasDirectorySegment(file: string): boolean {
   return file.includes('/') || file.includes('\\');
 }
 
-function isInside(folderPath: string, path: string): boolean {
+/** Strictly inside: the folder itself is not. */
+export function isInside(folderPath: string, path: string): boolean {
   const rel = relative(folderPath, path);
   return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
-function samePath(a: string, b: string): boolean {
+export function samePath(a: string, b: string): boolean {
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 

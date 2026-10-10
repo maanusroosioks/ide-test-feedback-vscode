@@ -2,6 +2,7 @@ import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TestLocationResolver } from '../../../src/capture/location';
 import { collectTestEvidence, type CaptureOptions, type TestEvidence } from '../../../src/capture/evidence';
+import { locateResults, SourceFileCache, type LocatedResult } from '../../../src/capture/sourceFiles';
 import { describeSuspiciousTests } from '../../../src/capture/integrity';
 import { sliceLines } from '../../../src/scanning';
 import type { NormalizedTestCase, NormalizedTestRun } from '../../../src/core/types';
@@ -14,6 +15,7 @@ const PYTHON_SOURCE = fixture('python/test_calculator.py');
 
 interface Harness {
   evidence: TestEvidence;
+  located: LocatedResult[];
   reads: string[];
 }
 
@@ -31,21 +33,21 @@ async function collect(
     exists: async (path) => absolute.has(resolve(path)),
     listDirs: async () => [],
   });
+  const cache = new SourceFileCache(FOLDER, testRun.platform, async (path) => {
+    reads.push(path);
+    const content = absolute.get(resolve(path));
+    if (content === undefined) throw new Error(`ENOENT: ${path}`);
+    return content;
+  });
 
-  const evidence = await collectTestEvidence(testRun, resolver, {
-    folderPath: FOLDER,
+  const located = await locateResults(testRun, resolver, cache);
+  const evidence = collectTestEvidence(testRun, located, {
     captureSource: true,
     maxTotalChars: 200000,
-    readFile: async (path) => {
-      reads.push(path);
-      const content = absolute.get(resolve(path));
-      if (content === undefined) throw new Error(`ENOENT: ${path}`);
-      return content;
-    },
     ...overrides,
   });
 
-  return { evidence, reads };
+  return { evidence, located, reads };
 }
 
 const PYTHON_FILES = { 'test_calculator.py': PYTHON_SOURCE };
@@ -53,6 +55,38 @@ const PYTHON_FILES = { 'test_calculator.py': PYTHON_SOURCE };
 function locatedFlags(evidence: TestEvidence): boolean[] {
   return evidence.integrity.map((entry) => entry.integrity.located);
 }
+
+describe('locateResults', () => {
+  it('traces each result as far as it goes, index-aligned with the run', async () => {
+    const { located } = await collect(
+      run([
+        { testSuite: 'test_calculator', testName: 'test_add_returns_sum', status: 'PASSED' },
+        { testSuite: 'test_calculator', testName: 'test_not_in_the_file', status: 'PASSED' },
+        { testSuite: 'nowhere', testName: 'test_x', status: 'PASSED' },
+      ]),
+      PYTHON_FILES,
+    );
+
+    expect(located).toHaveLength(3);
+    expect(located[0].file?.relativePath).toBe('test_calculator.py');
+    expect(located[0].declaration?.name).toBe('test_add_returns_sum');
+    expect(located[1].file?.relativePath).toBe('test_calculator.py');
+    expect(located[1].declaration).toBeUndefined();
+    expect(located[2]).toEqual({ location: undefined, file: undefined, declaration: undefined });
+  });
+
+  it('shares one scanned file between the results that live in it', async () => {
+    const { located } = await collect(
+      run([
+        { testSuite: 'test_calculator', testName: 'test_add_returns_sum', status: 'PASSED' },
+        { testSuite: 'test_calculator', testName: 'test_async_add', status: 'PASSED' },
+      ]),
+      PYTHON_FILES,
+    );
+
+    expect(located[0].file).toBe(located[1].file);
+  });
+});
 
 describe('collectTestEvidence — source capture', () => {
   it('locates just the matched test, decorator included', async () => {

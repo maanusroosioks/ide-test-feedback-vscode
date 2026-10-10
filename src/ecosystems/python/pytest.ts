@@ -4,11 +4,11 @@ import { defineAdapter } from '../../runner/define';
 import { anyExists, commandExists, pathExists } from '../../util/shell';
 import { parseJUnitXmlFile } from '../../runner/parsers/junit-xml-parser';
 import { tempFileReport } from '../../runner/reports';
+import { PYTEST_FILE } from './languages';
 
 const DETECT_FILES = ['pytest.ini', 'pyproject.toml', 'setup.cfg', 'conftest.py'];
 
-/** pytest's default `python_files`; a project may have nothing else to recognise it by. */
-const TEST_FILE = /^(?:test_.*|.*_test)\.py$/;
+/** Where test files alone, with nothing else to recognise the project by, still count. */
 const TEST_FILE_DIRS = ['', 'tests', 'test'];
 
 /** Where `python -m venv` and most tooling put a project's environment. */
@@ -17,7 +17,7 @@ const VENV_DIRS = ['.venv', 'venv', 'env'];
 async function hasTestFiles(folderPath: string): Promise<boolean> {
   for (const dir of TEST_FILE_DIRS) {
     const names = await readdir(join(folderPath, dir)).catch((): string[] => []);
-    if (names.some((name) => TEST_FILE.test(name))) return true;
+    if (names.some((name) => PYTEST_FILE.test(name))) return true;
   }
   return false;
 }

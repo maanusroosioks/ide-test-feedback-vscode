@@ -13,6 +13,11 @@ export type SourceLanguage = 'python' | 'java' | 'kotlin' | 'csharp';
 export interface SourceLanguageProfile {
   /** Lower-case, dot included. */
   extensions: string[];
+  /**
+   * When set, only files named like this hold tests, as with pytest's `python_files`. Unset for
+   * languages whose scanner only finds members carrying a test marker anyway.
+   */
+  testFileName?: RegExp;
   lexer: LexicalRules;
   /** `masked` is `text` put through `lexer`. */
   scanDeclarations(text: string, masked: string): TestDeclaration[];

@@ -1,8 +1,13 @@
 import { scanPython } from '../../scanning';
 import type { SourceLanguageProfile } from '../types';
 
+/** pytest's default `python_files`. */
+export const PYTEST_FILE = /^(?:test_.*|.*_test)\.py$/;
+
 export const pythonSource: SourceLanguageProfile = {
   extensions: ['.py'],
+  // A `def test_helper` in an ordinary module is not a test.
+  testFileName: PYTEST_FILE,
   lexer: {
     lineComment: '#',
     tripleQuoteEscapes: true,

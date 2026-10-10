@@ -48,7 +48,17 @@ a project without a key asks for one before the tests run.
 
 ## Test Explorer
 
-Runs also appear in VS Code's **Testing** view under a **Moodle Tests** controller.
+Your tests appear in VS Code's **Testing** view under **Moodle Tests**, read straight from
+the source — no build or run needed. Each workspace folder lists its test files, then the
+classes and tests declared in them, and every test gets a pass/fail icon next to its
+declaration once it has run. The list follows your edits: a test appears as soon as you save
+it, and disappears when you delete it.
+
+Some tests only exist once the tests run: each case of a parameterized test, xUnit theory
+data, or JUnit's `@TestFactory` tests. Those appear under their test after a run. A result
+that can't be traced to any test file is listed under the suite name the test framework
+reported.
+
 The normal run button runs the suite and submits nothing. To submit, use either:
 
 - the **cloud-upload button** in the Testing view toolbar, or
@@ -59,17 +69,15 @@ Submitting is deliberately a button rather than a second run profile, so there i
 hidden mode to keep track of and no way to submit by accident. Runs that submitted are
 labelled *Run & Submit to Moodle* in the Test Results history.
 
-Test command output streams into the run's terminal, and the tree stays populated
-across window reloads.
+Test command output streams into the run's terminal.
 
 Current limitations:
 
-- Tests appear only **after the first run** — Maven and Gradle offer no reliable way
-  to enumerate tests without executing them, so there's no up-front discovery.
 - Running a single test or suite from the gutter still runs the whole project; the
   per-framework test filters aren't wired up yet.
-- Failing tests get a file **and** a line; passing tests get only the file, since a
-  location is derived from the stack trace.
+- Python test files are found by pytest's default names, `test_*.py` and `*_test.py`. A
+  project that changes `python_files` still runs and submits normally; its other test files
+  join the tree after the first run that reaches them, and follow your edits from then on.
 - If you also have the Java or Python test extensions installed, their controllers
   appear alongside this one. Only **Moodle Tests** submits.
 

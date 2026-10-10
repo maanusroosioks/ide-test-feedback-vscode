@@ -48,6 +48,11 @@ export const SOURCE_LANGUAGES: Record<SourceLanguage, SourceLanguageProfile> = O
   ...Object.values(ECOSYSTEMS).map((ecosystem) => ecosystem.languages),
 ) as Record<HostedLanguage, SourceLanguageProfile>;
 
+/** The languages a platform's tests may be written in. */
+export function languagesOf(platform: Platform): SourceLanguage[] {
+  return Object.keys(ECOSYSTEMS[platform].languages) as SourceLanguage[];
+}
+
 const LANGUAGE_BY_EXTENSION = new Map<string, SourceLanguage>(
   (Object.entries(SOURCE_LANGUAGES) as [SourceLanguage, SourceLanguageProfile][]).flatMap(
     ([language, profile]) => profile.extensions.map((extension) => [extension, language] as const),

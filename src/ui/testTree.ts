@@ -2,17 +2,35 @@ const SEPARATOR = '::';
 
 export const NO_SUITE = '(no suite)';
 
-/** Remembered across window reloads so the tree isn't empty on startup. */
-export interface KnownTest {
-  suite: string;
-  name: string;
-  file?: string;
-}
-
 export function folderItemId(folderPath: string): string {
   return folderPath;
 }
 
+/** A leading `/` keeps a file's id apart from a fallback suite's, whose name never starts with one. */
+export function fileItemId(folderPath: string, relativePath: string): string {
+  return `${folderPath}${SEPARATOR}/${relativePath}`;
+}
+
+export function isFileItemId(folderPath: string, id: string): boolean {
+  return id.startsWith(`${folderPath}${SEPARATOR}/`);
+}
+
+/** `container` is the dotted path from the outermost class down, e.g. `Outer.Inner`. */
+export function classItemId(fileId: string, container: string): string {
+  return `${fileId}${SEPARATOR}${container}`;
+}
+
+/** Keyed by where the test is declared, so it holds from discovery through every run. */
+export function declarationItemId(fileId: string, container: string | undefined, name: string): string {
+  return `${fileId}${SEPARATOR}${container ?? ''}${SEPARATOR}${name}`;
+}
+
+/** A result that exists only once the tests run, e.g. one case of a parameterized test. */
+export function resultItemId(parentId: string, testName: string): string {
+  return `${parentId}${SEPARATOR}run:${testName}`;
+}
+
+/** For results traced to no file: grouped by the suite the report names. */
 export function suiteItemId(folderPath: string, suite: string): string {
   return `${folderPath}${SEPARATOR}${suite}`;
 }
