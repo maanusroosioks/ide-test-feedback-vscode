@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import type { AdapterRegistry } from '../../../src/runner/registry';
-import type { AuthService } from '../../../src/auth/authService';
+import type { AuthService, GetAccessTokenOptions } from '../../../src/auth/authService';
 import { collectTestEvidence } from '../../../src/capture/evidence';
 import { TestFileFinder } from '../../../src/capture/discovery';
 import { locateResults, type SourceFileCache } from '../../../src/capture/sourceFiles';
@@ -99,7 +99,7 @@ beforeEach(async () => {
 /** The registry only feeds discovery here: `runTests` is mocked. */
 function setup(registry: AdapterRegistry = registryWith(stubAdapter('pytest'))) {
   const status = fakeStatus();
-  const authService = { getAccessToken: vi.fn(async () => 'token-abc') };
+  const authService = { getAccessToken: vi.fn(async (_options?: GetAccessTokenOptions) => 'token-abc') };
   const control = registerTestController(asContext(context), {
     registry,
     authService: authService as unknown as AuthService,
@@ -874,6 +874,25 @@ describe('performRun — submitting', () => {
     await expect(performRun(control, { submit: true })).rejects.toBeInstanceOf(CancelledError);
 
     expect(runTests).not.toHaveBeenCalled();
+  });
+
+  it('frees the folder when the run is cancelled during sign-in', async () => {
+    const { control, authService } = setup();
+    const caller = new AbortController();
+    authService.getAccessToken.mockImplementationOnce(
+      ({ signal } = {}) =>
+        new Promise<string>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new CancelledError()));
+          caller.abort();
+        }),
+    );
+    testsRan(PASSING);
+
+    await expect(performRun(control, { submit: true, signal: caller.signal })).rejects.toBeInstanceOf(CancelledError);
+    await performRun(control);
+
+    expect(window.showInformationMessage).not.toHaveBeenCalledWith(expect.stringContaining('already running'));
+    expect(runTests).toHaveBeenCalledOnce();
   });
 
   it('warns about an emptied test and submits only on confirmation', async () => {

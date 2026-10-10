@@ -52,6 +52,20 @@ describe('AuthService', () => {
     await expect(service.getAccessToken()).rejects.toBeInstanceOf(CancelledError);
   });
 
+  it('stops waiting on a sign-in when the caller aborts', async () => {
+    authentication.getSession.mockReturnValueOnce(new Promise(() => {}));
+    const caller = new AbortController();
+
+    const token = service.getAccessToken({ signal: caller.signal });
+    caller.abort();
+
+    await expect(token).rejects.toBeInstanceOf(CancelledError);
+  });
+
+  it('does not start waiting when the caller already aborted', async () => {
+    await expect(service.getAccessToken({ signal: AbortSignal.abort() })).rejects.toBeInstanceOf(CancelledError);
+  });
+
   it('passes other sign-in failures through', async () => {
     authentication.getSession.mockRejectedValueOnce(new Error('AADSTS50020: user account not in tenant'));
 

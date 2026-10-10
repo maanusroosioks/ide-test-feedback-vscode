@@ -177,7 +177,7 @@ export async function runFolder(
   try {
     if (submit) {
       report?.('Signing in…');
-      await deps.authService.getAccessToken();
+      await deps.authService.getAccessToken({ signal: abort.signal });
     }
 
     deps.status.running();
