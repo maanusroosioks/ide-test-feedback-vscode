@@ -89,24 +89,18 @@ describe.skipIf(!existsSync(pythonSample))('python-sample', () => {
 });
 
 describe.skipIf(!existsSync(mavenSample) || !existsSync(gradleSample))('java samples', () => {
-  const testRun = run('maven-junit', 'jvm', [
-    { testSuite: 'com.example.calculator.CalculatorTest', testName: 'addReturnsSum()', status: 'PASSED' },
-    {
-      testSuite: 'com.example.calculator.CalculatorTest',
-      testName: 'divideReturnsQuotient(int, int, int)[1]',
-      status: 'PASSED',
-    },
-    {
-      testSuite: 'com.example.calculator.CalculatorTest',
-      testName: 'divideByZeroThrows()',
-      status: 'PASSED',
-    },
-  ]);
+  const javaRun = (adapterId: string, parameterizedName: string): NormalizedTestRun =>
+    run(adapterId, 'jvm', [
+      { testSuite: 'com.example.calculator.CalculatorTest', testName: 'addReturnsSum()', status: 'PASSED' },
+      { testSuite: 'com.example.calculator.CalculatorTest', testName: parameterizedName, status: 'PASSED' },
+      { testSuite: 'com.example.calculator.CalculatorTest', testName: 'divideByZeroThrows()', status: 'PASSED' },
+    ]);
 
+  // Each as its own report names a parameterized invocation: gradle leaves the method out.
   it.each([
-    ['maven', mavenSample],
-    ['gradle', gradleSample],
-  ])('%s: resolves tests under src/test/java and captures them', async (_name, folder) => {
+    ['maven', mavenSample, javaRun('maven-junit', 'divideReturnsQuotient(int, int, int)[1]')],
+    ['gradle', gradleSample, javaRun('gradle-junit', '[1] 10, 2, 5')],
+  ])('%s: resolves tests under src/test/java and captures them', async (_name, folder, testRun) => {
     const evidence = await evidenceFor(folder, testRun);
 
     expect(located(evidence)).toBe(3);

@@ -50,6 +50,27 @@ describe('matchDeclaration', () => {
     ).toBe('divideReturnsQuotient');
   });
 
+  it('java: maps a gradle invocation name, which drops the method, onto the parameterized test', () => {
+    const suite = 'com.example.calculator.CalculatorTest';
+    expect(matchDeclaration(java, '[1] 10, 2, 5', suite)?.name).toBe('divideReturnsQuotient');
+    expect(matchDeclaration(java, '[2] a=9, b=3, expected=3', suite)?.name).toBe('divideReturnsQuotient');
+    // Not an invocation name, so the lone parameterized test must not claim it.
+    expect(matchDeclaration(java, 'unknown display name', suite)).toBeUndefined();
+  });
+
+  it('java: picks between parameterized tests by the quoted @CsvSource row, else gives up', () => {
+    const csv = ['@ParameterizedTest', '@CsvSource({"10, 2, 5"})'];
+    const values = ['@ParameterizedTest', '@ValueSource(ints = {1, 2})'];
+    const divide = declaration({ name: 'divide', container: 'T', markers: csv });
+    const add = declaration({ name: 'add', container: 'T', markers: values });
+    const repeated = declaration({ name: 'again', container: 'T', markers: ['@RepeatedTest(3)'] });
+    const all = [divide, add, repeated];
+
+    expect(matchDeclaration(all, '[1] 10, 2, 5', 'p.T')).toBe(divide);
+    expect(matchDeclaration(all, '[1] 1', 'p.T')).toBeUndefined();
+    expect(matchDeclaration(all, 'repetition 2 of 3', 'p.T')).toBe(repeated);
+  });
+
   it('java: resolves a @DisplayName that normalization cannot recover', () => {
     expect(matchDeclaration(java, 'adds two and three', 'com.example.calculator.CalculatorTest')?.name).toBe(
       'displayNamed',

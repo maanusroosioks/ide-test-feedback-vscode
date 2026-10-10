@@ -43,6 +43,35 @@ function displayNameOf(marker: string): string | undefined {
   return match ? match[1] : undefined;
 }
 
+const PARAMETERIZED = /^@\s*(?:[\w.]*\.)?ParameterizedTest\b/;
+const REPEATED = /^@\s*(?:[\w.]*\.)?RepeatedTest\b/;
+/** JUnit's default invocation names. */
+const PARAMETERIZED_INVOCATION = /^\[\d+\]\s*(.*)$/;
+const REPETITION = /^repetition \d+ of \d+$/;
+
+function markedWith(declarations: TestDeclaration[], marker: RegExp): TestDeclaration[] {
+  return declarations.filter((declaration) => declaration.markers.some((text) => marker.test(text)));
+}
+
+/**
+ * Gradle reports a JUnit template's invocations by display name alone (`[1] 10, 2, 5`), so the
+ * suite's template test is the only lead. A custom `name =` pattern can't be told apart from an
+ * unknown test and goes unmatched.
+ */
+function templateInvocationOf(raw: string, inContainer: TestDeclaration[]): TestDeclaration[] {
+  if (REPETITION.test(raw)) return markedWith(inContainer, REPEATED);
+  const invocation = PARAMETERIZED_INVOCATION.exec(raw);
+  if (!invocation) return [];
+
+  const templates = markedWith(inContainer, PARAMETERIZED);
+  // A `@CsvSource` row is displayed as written, so it can single out one of several templates.
+  const args = invocation[1];
+  const quoting = args
+    ? templates.filter((declaration) => declaration.markers.some((marker) => marker.includes(`"${args}"`)))
+    : [];
+  return quoting.length > 0 ? quoting : templates;
+}
+
 function unique(
   candidates: TestDeclaration[],
   preferLine: number | undefined,
@@ -100,6 +129,7 @@ export function matchDeclaration(
           return displayName === raw || displayName === normalized;
         }),
       ),
+    () => templateInvocationOf(raw, inContainer),
   ];
 
   for (const rule of rules) {
