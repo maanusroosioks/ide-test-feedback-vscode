@@ -161,7 +161,9 @@ cloned repository can't redirect where your sign-in token is sent.
 | --- | --- | --- |
 | `moodleSubmit.serviceUrl` | `""` | Base URL of the submission service. |
 | `moodleSubmit.authScopes` | `["User.Read"]` | OAuth scopes requested from the Microsoft provider. Change only for a different deployment. |
-| `moodleSubmit.requestTimeoutMs` | `15000` | Timeout for requests to the service (1 000–120 000). |
+
+`moodleSubmit.requestTimeoutMs` (default `15000`, clamped to 1 000–120 000) sets the timeout for
+requests to the service. It changes nothing about where the token goes, so a workspace may set it too.
 
 **Running tests** — can differ per folder.
 
@@ -190,7 +192,7 @@ Restricted Mode. Trust the folder to use it.
 | Maven (JUnit) | `pom.xml` | `mvnw -B test -Dmaven.test.failure.ignore=true` (or `mvn …`) |
 | Gradle (JUnit) | `build.gradle(.kts)` / `settings.gradle(.kts)` | `gradlew cleanTest test --continue` (or `gradle …`) |
 | pytest | `pytest.ini`, `pyproject.toml`, `setup.cfg`, `conftest.py`, or `test_*.py` / `*_test.py` files | `python -m pytest --junit-xml=…` |
-| .NET | `*.csproj` / `*.sln` / `*.slnx`, or a `*Tests.csproj` one folder down | `dotnet test --logger trx …` |
+| .NET | `*.csproj` / `*.sln` / `*.slnx`, or a `*Test.csproj` / `*Tests.csproj` one folder down | `dotnet test --logger trx …` |
 
 The project's own Maven or Gradle wrapper is used when it has one; otherwise `mvn` or
 `gradle` must be on your `PATH`. pytest runs with the Python in the project's `.venv`,
