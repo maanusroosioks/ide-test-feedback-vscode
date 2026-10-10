@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DISCOVERY_LIMITS,
@@ -9,6 +9,7 @@ import {
 } from '../../../src/capture/discovery';
 import { SourceFileCache } from '../../../src/capture/sourceFiles';
 import type { Platform } from '../../../src/core/types';
+import { SOURCE_LANGUAGES } from '../../../src/ecosystems';
 import { tempDir, writeTree } from '../helpers/fs';
 import { fixture } from '../helpers/sourceFixtures';
 
@@ -186,6 +187,11 @@ describe('TestFileFinder.isCandidate', () => {
 
 describe('SOURCE_FILE_GLOB', () => {
   it("covers every scanned language's extensions", () => {
-    expect(SOURCE_FILE_GLOB).toBe('**/*.{java,kt,kts,py,cs}');
+    const extensions = Object.values(SOURCE_LANGUAGES).flatMap((profile) => profile.extensions);
+    expect(extensions.length).toBeGreaterThan(0);
+    for (const extension of extensions) {
+      expect(posix.matchesGlob(`src/deep/File${extension}`, SOURCE_FILE_GLOB), extension).toBe(true);
+    }
+    expect(posix.matchesGlob('src/notes.txt', SOURCE_FILE_GLOB)).toBe(false);
   });
 });

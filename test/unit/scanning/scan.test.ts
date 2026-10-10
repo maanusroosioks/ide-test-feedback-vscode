@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { languageForFile, maskCommentsAndStrings, scanTestDeclarations } from '../../../src/ecosystems';
+import { languageForFile, scanTestDeclarations } from '../../../src/ecosystems';
 import { sliceLines, type TestDeclaration } from '../../../src/scanning';
 import { declarationNamed as find, fixture, scan } from '../helpers/sourceFixtures';
 
@@ -20,36 +20,6 @@ describe('languageForFile', () => {
 
   it("falls back to the platform's default language when the extension is unknown", () => {
     expect(languageForFile('/p/FooTest.groovy', 'jvm')).toBe('java');
-  });
-});
-
-describe('maskCommentsAndStrings', () => {
-  it('preserves length and newlines', () => {
-    const text = 'a = "hello"  # trailing\nb = 2\n';
-    const masked = maskCommentsAndStrings(text, 'python');
-    expect(masked).toHaveLength(text.length);
-    expect(masked.split('\n')).toHaveLength(text.split('\n').length);
-  });
-
-  it('blanks braces inside string literals but keeps the code around them', () => {
-    const masked = maskCommentsAndStrings('if (x) { s = "}"; }', 'java');
-    expect(masked).toBe('if (x) { s = " "; }');
-  });
-
-  it('handles C# verbatim strings, where "" escapes a quote', () => {
-    const masked = maskCommentsAndStrings('var v = @"a } "" b"; var n = 1;', 'csharp');
-    expect(masked).toBe('var v = @"        "; var n = 1;');
-  });
-
-  it('does not process escapes inside a Kotlin raw string', () => {
-    const masked = maskCommentsAndStrings('val v = """a \\ } b""" + c', 'kotlin');
-    expect(masked).toBe('val v = """       """ + c');
-  });
-
-  it('blanks block comments', () => {
-    const masked = maskCommentsAndStrings('/* @Test */ void f() {}', 'java');
-    expect(masked).not.toContain('@Test');
-    expect(masked).toContain('void f() {}');
   });
 });
 
@@ -270,66 +240,6 @@ describe('scanTestDeclarations — edge cases', () => {
     expect(second.container).toBe('TestA');
   });
 
-  it('kotlin: reads backticked names holding `=` or parentheses', () => {
-    const text = 'class T {\n  @Test\n  fun `1 + 1 = 2`() {\n    assertEquals(2, 1 + 1)\n  }\n  @Test\n  fun `divide(a, b) works`() {\n    assertTrue(x)\n  }\n}\n';
-    expect(names(scanTestDeclarations(text, 'kotlin'))).toEqual(['1 + 1 = 2', 'divide(a, b) works']);
-  });
-
-  it('kotlin: captures an expression body that starts on the next line', () => {
-    const text = 'class T {\n  @Test\n  fun a() =\n    runTest {\n      assertTrue(x)\n    }\n}\n';
-    const [declaration] = scanTestDeclarations(text, 'kotlin');
-    expect(declaration.bodyText).toContain('assertTrue(x)');
-    expect(declaration.endLine).toBe(6);
-  });
-
-  it('kotlin: does not let a bodyless class claim the next class', () => {
-    const text = 'data class Case(val a: Int)\n\nclass CalcTest {\n  @Test\n  fun a() { assertTrue(x) }\n}\n';
-    expect(scanTestDeclarations(text, 'kotlin')[0].container).toBe('CalcTest');
-  });
-
-  it.each([
-    ['kotlin', '@Nested\ninner class Inner {\n  @Test\n  fun a() { assertTrue(x) }\n}\n', ['@Nested']],
-    ['java', '@Disabled("wip")\npublic final class FooTest {\n  @Test\n  void a() { assertTrue(x); }\n}\n', ['@Disabled("wip")']],
-    ['csharp', '[Ignore("wip")]\npublic sealed class FooTests\n{\n    [Test]\n    public void A() { Assert.Pass(); }\n}\n', ['[Ignore("wip")]']],
-  ] as const)('%s: collects type markers across modifiers', (language, text, expected) => {
-    expect(scanTestDeclarations(text, language)[0].containerMarkers).toEqual(expected);
-  });
-
-  it("kotlin: reads a backticked name holding an apostrophe, which opens no char literal", () => {
-    const text = "class T {\n  @Test\n  fun `doesn't crash`() {\n    assertTrue(x)\n  }\n  @Test\n  fun other() { assertTrue(y) }\n}\n";
-    const declarations = scanTestDeclarations(text, 'kotlin');
-    expect(names(declarations)).toEqual(["doesn't crash", 'other']);
-    expect(declarations[0].endLine).toBe(5);
-  });
-
-  it('kotlin: follows an expression body onto a line opening with `.`', () => {
-    const text = 'class T {\n  @Test\n  fun a() = assertThat(x)\n    .isEqualTo(1)\n}\n';
-    expect(scanTestDeclarations(text, 'kotlin')[0].bodyText).toBe('assertThat(x)\n    .isEqualTo(1)');
-  });
-
-  it('kotlin: does not let a bodyless nested class claim the following test', () => {
-    const text = '@Disabled\nclass OuterTest {\n  data class Case(val a: Int)\n  @Test\n  fun a() { assertTrue(x) }\n}\n';
-    const [declaration] = scanTestDeclarations(text, 'kotlin');
-    expect(declaration.container).toBe('OuterTest');
-    expect(declaration.containerMarkers).toEqual(['@Disabled']);
-  });
-
-  it.each([
-    ['java', '@Disabled\nclass OuterTest {\n  @Nested\n  class Inner {\n    @Test\n    void a() { assertTrue(x); }\n  }\n}\n', ['@Disabled', '@Nested']],
-    ['python', '@pytest.mark.skip\nclass TestOuter:\n    class TestInner:\n        def test_a(self):\n            assert 1\n', ['@pytest.mark.skip']],
-  ] as const)('%s: carries an outer class’s markers to nested tests', (language, text, expected) => {
-    expect(scanTestDeclarations(text, language)[0].containerMarkers).toEqual(expected);
-  });
-
-  it('csharp: names a `record struct` by its name, not its second keyword', () => {
-    const text = 'public record struct Point(int X)\n{\n    [Fact]\n    public void A() { Assert.True(x); }\n}\n';
-    expect(scanTestDeclarations(text, 'csharp')[0].container).toBe('Point');
-  });
-
-  it('csharp: finds a generic test method', () => {
-    const text = 'public class FooTests\n{\n    [Theory]\n    [InlineData(1)]\n    public void Generic<T>(T x) { Assert.NotNull(x); }\n}\n';
-    expect(names(scanTestDeclarations(text, 'csharp'))).toEqual(['Generic']);
-  });
 });
 
 describe('sliceLines', () => {

@@ -41,7 +41,6 @@ describe('defineAdapter', () => {
     expect(result.run.platform).toBe('python');
     expect(result.run.results).toHaveLength(1);
     expect(result.reportError).toBeUndefined();
-    expect(result.run.finishedAt).toBeGreaterThanOrEqual(result.run.startedAt);
   });
 
   it('runs the prepared command in the project folder', async () => {
@@ -65,14 +64,31 @@ describe('defineAdapter', () => {
     expect(logger.messages).toContainEqual(expect.stringContaining('Fake Runner'));
   });
 
-  it('times the run from just before the command starts', async () => {
-    const before = Date.now();
-    const parse = vi.fn(async (): Promise<NormalizedTestCase[]> => []);
+  it('times the run from just before the command starts, leaving out preparation', async () => {
+    vi.useFakeTimers({ now: 1_000 });
+    try {
+      const adapter = defineAdapter({
+        id: 'fake',
+        displayName: 'Fake Runner',
+        platform: 'python',
+        detect: async () => true,
+        prepare: async () => {
+          vi.setSystemTime(5_000);
+          return { command: 'fake-tool', parse: async (): Promise<NormalizedTestCase[]> => [] };
+        },
+      });
+      vi.mocked(runCommand).mockImplementationOnce(async () => {
+        vi.setSystemTime(9_000);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
 
-    const result = await adapterThatPrepares({ parse }).run('/work', {});
+      const { run } = await adapter.run('/work', {});
 
-    expect(result.run.startedAt).toBeGreaterThanOrEqual(before);
-    expect(parse).toHaveBeenCalledOnce();
+      expect(run.startedAt).toBe(5_000);
+      expect(run.finishedAt).toBe(9_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('cleans up when the run is cancelled', async () => {

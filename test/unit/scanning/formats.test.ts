@@ -46,6 +46,8 @@ const CASES: Array<[string, SourceLanguage, string, Expect]> = [
   ['java record', 'java', 'record P(int x) {\n  @Test\n  void a() { assertTrue(x); }\n}\n', { names: ['a'], container: 'P' }],
   ['java field annotation before', 'java', 'class T {\n  @RegisterExtension\n  static Ext ext = new Ext();\n  @Test\n  void a() { assertTrue(x); }\n}\n', { names: ['a'], markers: ['@Test'] }],
   ['java commented test', 'java', 'class T {\n  // @Test\n  // void a() { }\n  /*\n  @Test\n  void b() { }\n  */\n  @Test void c() { assertTrue(x); }\n}\n', { names: ['c'] }],
+  ['java type markers across modifiers', 'java', '@Disabled("wip")\npublic final class FooTest {\n  @Test\n  void a() { assertTrue(x); }\n}\n', { names: ['a'], containerMarkers: ['@Disabled("wip")'] }],
+  ['java outer markers reach nested tests', 'java', '@Disabled\nclass OuterTest {\n  @Nested\n  class Inner {\n    @Test\n    void a() { assertTrue(x); }\n  }\n}\n', { names: ['a'], containerMarkers: ['@Disabled', '@Nested'] }],
   // ---------------- kotlin
   ['kt one line', 'kotlin', 'class T { @Test fun a() { assertTrue(x) } }', { names: ['a'], container: 'T' }],
   ['kt allman', 'kotlin', 'class T\n{\n  @Test\n  fun a()\n  {\n    assertTrue(x)\n  }\n}\n', { names: ['a'], lines: [3, 7] }],
@@ -68,6 +70,14 @@ const CASES: Array<[string, SourceLanguage, string, Expect]> = [
   ['kt unicode', 'kotlin', 'class ÕunTest {\n  @Test\n  fun kasÕige() { assertTrue(x) }\n}\n', { names: ['kasÕige'], container: 'ÕunTest' }],
   ['kt enum class body', 'kotlin', 'enum class Color { RED, GREEN }\nclass T {\n  @Test fun a() { assertTrue(x) }\n}\n', { names: ['a'], container: 'T' }],
   ['kt sealed bodyless chain', 'kotlin', 'sealed interface S\nobject A : S\ndata class B(val x: Int) : S\nclass T {\n  @Test fun a() { assertTrue(x) }\n}\n', { names: ['a'], container: 'T' }],
+  ['kt bodyless class before', 'kotlin', 'data class Case(val a: Int)\n\nclass CalcTest {\n  @Test\n  fun a() { assertTrue(x) }\n}\n', { names: ['a'], container: 'CalcTest' }],
+  ['kt bodyless nested class before', 'kotlin', '@Disabled\nclass OuterTest {\n  data class Case(val a: Int)\n  @Test\n  fun a() { assertTrue(x) }\n}\n', { names: ['a'], container: 'OuterTest', containerMarkers: ['@Disabled'] }],
+  ['kt type markers across modifiers', 'kotlin', '@Nested\ninner class Inner {\n  @Test\n  fun a() { assertTrue(x) }\n}\n', { names: ['a'], containerMarkers: ['@Nested'] }],
+  ['kt backtick = and parens', 'kotlin', 'class T {\n  @Test\n  fun `1 + 1 = 2`() {\n    assertEquals(2, 1 + 1)\n  }\n  @Test\n  fun `divide(a, b) works`() {\n    assertTrue(x)\n  }\n}\n', { names: ['1 + 1 = 2', 'divide(a, b) works'] }],
+  // An apostrophe in a backticked name opens no char literal.
+  ['kt backtick apostrophe', 'kotlin', "class T {\n  @Test\n  fun `doesn't crash`() {\n    assertTrue(x)\n  }\n  @Test\n  fun other() { assertTrue(y) }\n}\n", { names: ["doesn't crash", 'other'], lines: [2, 5] }],
+  ['kt expr body on next line', 'kotlin', 'class T {\n  @Test\n  fun a() =\n    runTest {\n      assertTrue(x)\n    }\n}\n', { names: ['a'], body: 'assertTrue(x)', lines: [2, 6] }],
+  ['kt expr body continues with .', 'kotlin', 'class T {\n  @Test\n  fun a() = assertThat(x)\n    .isEqualTo(1)\n}\n', { names: ['a'], body: 'assertThat(x)\n    .isEqualTo(1)' }],
   // ---------------- csharp
   ['cs k&r', 'csharp', 'public class T {\n    [Fact]\n    public void A() {\n        Assert.True(x);\n    }\n}\n', { names: ['A'], container: 'T' }],
   ['cs same line attr', 'csharp', 'public class T\n{\n    [Fact] public void A() { Assert.True(x); }\n}\n', { names: ['A'] }],
@@ -86,6 +96,9 @@ const CASES: Array<[string, SourceLanguage, string, Expect]> = [
   ['cs indexer before', 'csharp', 'public class T\n{\n    private int[] a = new int[3];\n    public int this[int i] => a[i];\n    [Fact]\n    public void A() { Assert.True(x); }\n}\n', { names: ['A'], markers: ['[Fact]'] }],
   ['cs unicode', 'csharp', 'public class ÕunTests\n{\n    [Fact]\n    public void KasÕige() { Assert.True(x); }\n}\n', { names: ['KasÕige'], container: 'ÕunTests' }],
   ['cs attr multi-line args', 'csharp', 'public class T\n{\n    [Theory]\n    [InlineData(\n        1,\n        2)]\n    public void A(int x, int y) { Assert.True(x); }\n}\n', { names: ['A'], lines: [3, 7] }],
+  ['cs type markers across modifiers', 'csharp', '[Ignore("wip")]\npublic sealed class FooTests\n{\n    [Test]\n    public void A() { Assert.Pass(); }\n}\n', { names: ['A'], containerMarkers: ['[Ignore("wip")]'] }],
+  ['cs record struct', 'csharp', 'public record struct Point(int X)\n{\n    [Fact]\n    public void A() { Assert.True(x); }\n}\n', { names: ['A'], container: 'Point' }],
+  ['cs generic method', 'csharp', 'public class FooTests\n{\n    [Theory]\n    [InlineData(1)]\n    public void Generic<T>(T x) { Assert.NotNull(x); }\n}\n', { names: ['Generic'] }],
   // ---------------- python
   ['py tabs', 'python', 'class TestA:\n\tdef test_a(self):\n\t\tassert 1\n\n\tdef test_b(self):\n\t\tassert 2\n', { names: ['test_a', 'test_b'], container: 'TestA' }],
   ['py comment between decorator', 'python', '@pytest.mark.skip\n# because\ndef test_a():\n    assert 1\n', { names: ['test_a'], markers: ['@pytest.mark.skip'] }],
@@ -106,6 +119,7 @@ const CASES: Array<[string, SourceLanguage, string, Expect]> = [
   ['py nested def in helper', 'python', 'class TestA:\n    def helper(self):\n        x = 1\n\n    @pytest.mark.skip\n    def test_a(self):\n        assert 1\n', { names: ['test_a'], markers: ['@pytest.mark.skip'] }],
   ['py fstring nested quotes', 'python', 'def test_a():\n    s = f"{d["k"]} {{"\n    assert s\n\ndef test_b():\n    assert 1\n', { names: ['test_a', 'test_b'] }],
   ['py fstring brace in nested string', 'python', 'def test_a():\n    s = f"{d["{"]}"\n    assert s\n\ndef test_b():\n    assert 1\n', { names: ['test_a', 'test_b'], lines: [1, 3] }],
+  ['py outer markers reach nested tests', 'python', '@pytest.mark.skip\nclass TestOuter:\n    class TestInner:\n        def test_a(self):\n            assert 1\n', { names: ['test_a'], containerMarkers: ['@pytest.mark.skip'] }],
 ];
 
 describe('scanTestDeclarations — formatting and edge cases', () => {
@@ -122,9 +136,21 @@ describe('scanTestDeclarations — formatting and edge cases', () => {
   });
 });
 
-describe('maskCommentsAndStrings — interpolation and nesting', () => {
+describe('maskCommentsAndStrings', () => {
+  it('preserves length and newlines', () => {
+    const text = 'a = "hello"  # trailing\nb = 2\n';
+    const masked = maskCommentsAndStrings(text, 'python');
+    expect(masked).toHaveLength(text.length);
+    expect(masked.split('\n')).toHaveLength(text.split('\n').length);
+  });
+
   // Each row is code, a string's content, and code again: only the content may be blanked.
   it.each([
+    ['java', 'if (x) { s = "', '}', '"; }'],
+    // In a C# verbatim string, "" escapes a quote.
+    ['csharp', 'var v = @"', 'a } "" b', '"; var n = 1;'],
+    // A Kotlin raw string processes no escapes.
+    ['kotlin', 'val v = """', 'a \\ } b', '""" + c'],
     ['csharp', 'x = $"', 'a {{ b }} {c}', '" + d;'],
     ['csharp', 'x = $"', '{s.Replace("(", "")}', '" + (d);'],
     ['csharp', 'x = $@"', '{a["k"]} ""q"" {{', '" + d;'],
@@ -146,6 +172,10 @@ describe('maskCommentsAndStrings — interpolation and nesting', () => {
   ] as const)('%s: %s…', (language, before, content, after) => {
     const text = `${before}${content}${after}`;
     expect(maskCommentsAndStrings(text, language)).toBe(`${before}${' '.repeat(content.length)}${after}`);
+  });
+
+  it('blanks a block comment, delimiters included', () => {
+    expect(maskCommentsAndStrings('/* @Test */ void f() {}', 'java')).toBe(`${' '.repeat(11)} void f() {}`);
   });
 
   it('nests Kotlin block comments but not Java ones', () => {

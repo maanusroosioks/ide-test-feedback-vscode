@@ -75,16 +75,19 @@ describe('locateResults', () => {
     expect(located[2]).toEqual({ location: undefined, file: undefined, declaration: undefined });
   });
 
-  it('shares one scanned file between the results that live in it', async () => {
-    const { located } = await collect(
+  it('reads and scans each file once, sharing it between the results that live in it', async () => {
+    const { located, reads } = await collect(
       run([
         { testSuite: 'test_calculator', testName: 'test_add_returns_sum', status: 'PASSED' },
+        { testSuite: 'test_calculator', testName: 'test_empty_body', status: 'PASSED' },
         { testSuite: 'test_calculator', testName: 'test_async_add', status: 'PASSED' },
       ]),
       PYTHON_FILES,
     );
 
+    expect(reads).toHaveLength(1);
     expect(located[0].file).toBe(located[1].file);
+    expect(located[1].file).toBe(located[2].file);
   });
 });
 
@@ -150,20 +153,7 @@ describe('collectTestEvidence — source capture', () => {
     expect(evidence.integrity[0].integrity.located).toBe(false);
   });
 
-  it('reads and scans each file once, however many of its tests ran', async () => {
-    const { reads } = await collect(
-      run([
-        { testSuite: 'test_calculator', testName: 'test_add_returns_sum', status: 'PASSED' },
-        { testSuite: 'test_calculator', testName: 'test_empty_body', status: 'PASSED' },
-        { testSuite: 'test_calculator', testName: 'test_async_add', status: 'PASSED' },
-      ]),
-      PYTHON_FILES,
-    );
-
-    expect(reads).toHaveLength(1);
-  });
-
-  it('lists each distinct file once', async () => {
+  it('lists each distinct file once, rather than sending each test body separately', async () => {
     const { evidence } = await collect(
       run([
         { testSuite: 'test_calculator', testName: 'test_add_returns_sum', status: 'PASSED' },
@@ -173,8 +163,10 @@ describe('collectTestEvidence — source capture', () => {
     );
 
     expect(evidence.payload.files).toEqual([{ path: 'test_calculator.py', content: PYTHON_SOURCE }]);
+    expect(kindsOf(evidence)).toEqual(['TEST', 'TEST']);
     // filePath is the join key from a result back into files.
     expect(evidence.payload.sources.map(filePathOf)).toEqual(['test_calculator.py', 'test_calculator.py']);
+    expect(JSON.stringify(evidence.payload).split('assert add(2, 3) == 5').length - 1).toBe(1);
   });
 
   it('lists no more files than the gateway accepts', async () => {
@@ -289,16 +281,6 @@ describe('collectTestEvidence — budget and opt-out', () => {
     expect(evidence.payload.sources[1]).toMatchObject({ kind: 'TEST', filePath: 'test_b.py' });
   });
 
-  it('reads each test off its file rather than sending its body separately', async () => {
-    const { evidence } = await collect(three, PYTHON_FILES);
-
-    expect(kindsOf(evidence)).toEqual(['TEST', 'TEST', 'TEST']);
-    expect(evidence.payload.files[0].content).toBe(PYTHON_SOURCE);
-
-    const serialized = JSON.stringify(evidence.payload);
-    expect(serialized.split('assert add(2, 3) == 5').length - 1).toBe(1);
-  });
-
   it('opting out of source still submits where each test was found', async () => {
     const { evidence } = await collect(three, PYTHON_FILES, { captureSource: false });
 
@@ -379,8 +361,6 @@ describe('collectTestEvidence — tamper detection', () => {
       'def test_add_returns_sum():\n    assert add(2, 3) == 5',
       'def test_add_returns_sum():\n    pass',
     );
-    expect(gutted).not.toBe(PYTHON_SOURCE);
-
     const { evidence } = await collect(testRun, { 'test_calculator.py': gutted });
 
     expect(evidence.integrity[0].integrity).toMatchObject({ empty: true, assertionCount: 0 });
@@ -433,7 +413,7 @@ describe('collectTestEvidence — tamper detection', () => {
 });
 
 describe('describeSuspiciousTests', () => {
-  it('names emptied, assertion-free and disabled tests', async () => {
+  it('names emptied and disabled tests, and leaves sound ones out', async () => {
     const testRun = run([
       { testSuite: 'test_calculator', testName: 'test_add_returns_sum', status: 'PASSED' },
       { testSuite: 'test_calculator', testName: 'test_empty_body', status: 'PASSED' },

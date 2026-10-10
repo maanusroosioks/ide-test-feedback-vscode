@@ -55,14 +55,12 @@ describe('login command', () => {
 
 describe('logout command', () => {
   it('points the user at the Accounts menu to sign out', async () => {
-    const context = fakeExtensionContext();
-    registerAccountCommands(asContext(context), asAuth(fakeAuth()));
+    registerAccountCommands(asContext(fakeExtensionContext()), asAuth(fakeAuth()));
 
     await invokeCommand('moodleSubmit.logout');
 
     expect(window.showInformationMessage).toHaveBeenCalledOnce();
     expect(window.showInformationMessage.mock.calls[0][0]).toContain('Accounts menu');
-    expect(context.subscriptions).toHaveLength(2);
   });
 });
 

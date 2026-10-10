@@ -12,14 +12,14 @@ const run = testRun([{ testSuite: 'test_calculator', testName: 'test_adds', stat
 let folderPath: string;
 let sent: TestRunRequest[];
 
-function submit() {
+function submit(testRunToSend = run) {
   const apiClient = {
     async submitResults(payload: TestRunRequest) {
       sent.push(payload);
       return { status: 202, body: { ok: true } };
     },
   } as unknown as MoodleApiClient;
-  return submitRun(run, { folderPath, projectName: 'my-project' }, { apiClient, logger: recordingLogger() });
+  return submitRun(testRunToSend, { folderPath, projectName: 'my-project' }, { apiClient, logger: recordingLogger() });
 }
 
 beforeEach(async () => {
@@ -48,14 +48,8 @@ describe('submitRun', () => {
     const failing = testRun([
       { testName: 'reads', status: 'FAILED', message: `FileNotFoundException: ${join(folderPath, 'data', 'in.txt')}` },
     ]);
-    const apiClient = {
-      async submitResults(payload: TestRunRequest) {
-        sent.push(payload);
-        return { status: 202, body: {} };
-      },
-    } as unknown as MoodleApiClient;
 
-    await submitRun(failing, { folderPath, projectName: 'p' }, { apiClient, logger: recordingLogger() });
+    await submit(failing);
 
     expect(sent[0].results[0].message).toBe(`FileNotFoundException: ${join('data', 'in.txt')}`);
   });

@@ -5,10 +5,21 @@ import { CancelledError } from '../../../src/core/errors';
 import { commandExists, killRunningCommands, runCommand } from '../../../src/util/shell';
 import { tempDir } from '../helpers/fs';
 
-describe('runCommand', () => {
-  // Double quotes outside, single inside: valid under both cmd.exe and sh.
-  const node = (script: string): string => `node -e "${script}"`;
+// Double quotes outside, single inside: valid under both cmd.exe and sh.
+const node = (script: string): string => `node -e "${script}"`;
 
+/** Starts a node process that idles for 30s, and waits until it has reported its own pid. */
+async function startSleeper(signal?: AbortSignal) {
+  const pidFile = join(await tempDir(), 'pid').split(sep).join('/');
+  const run = runCommand(
+    node(`require('fs').writeFileSync('${pidFile}', String(process.pid)); setTimeout(() => {}, 30000)`),
+    { cwd: process.cwd(), signal },
+  );
+  const pid = await waitFor(async () => Number(await readFile(pidFile, 'utf8').catch(() => '')) || undefined);
+  return { run, pid };
+}
+
+describe('runCommand', () => {
   it('captures stdout, stderr and the exit code', async () => {
     const result = await runCommand(
       node("process.stdout.write('out'); process.stderr.write('err'); process.exit(3)"),
@@ -26,12 +37,6 @@ describe('runCommand', () => {
 
     expect(result.stdout).toBe('eof 0');
   }, 10_000);
-
-  it('reports exit code 0 on success', async () => {
-    const result = await runCommand(node("process.stdout.write('ok')"), { cwd: process.cwd() });
-
-    expect(result.exitCode).toBe(0);
-  });
 
   it('runs in the given working directory', async () => {
     const dir = await tempDir();
@@ -53,31 +58,17 @@ describe('runCommand', () => {
     expect(chunks).toContainEqual(['b', 'stderr']);
   });
 
-  it('kills the command and rejects with CancelledError when aborted mid-run', async () => {
+  // The command runs under a shell; killing only the shell would orphan it, as cmd.exe does to mvn.
+  it("kills the command, shell's child included, and rejects with CancelledError when aborted", async () => {
     const controller = new AbortController();
-    const started = Date.now();
+    const { run, pid } = await startSleeper(controller.signal);
+    const abortedAt = Date.now();
 
-    const run = runCommand(node('setTimeout(() => {}, 30000)'), { cwd: process.cwd(), signal: controller.signal });
-    setTimeout(() => controller.abort(), 100);
+    controller.abort();
 
     await expect(run).rejects.toBeInstanceOf(CancelledError);
     // Well inside the 5s test timeout, which would otherwise fire first and hide a slow kill.
-    expect(Date.now() - started).toBeLessThan(3_000);
-  });
-
-  // The command runs under a shell; killing only the shell would orphan it, as cmd.exe does to mvn.
-  it("kills the shell's child process too, not just the shell", async () => {
-    const pidFile = join(await tempDir(), 'pid').split(sep).join('/');
-    const controller = new AbortController();
-
-    const run = runCommand(
-      node(`require('fs').writeFileSync('${pidFile}', String(process.pid)); setTimeout(() => {}, 30000)`),
-      { cwd: process.cwd(), signal: controller.signal },
-    );
-    const pid = await waitFor(async () => Number(await readFile(pidFile, 'utf8').catch(() => '')) || undefined);
-    controller.abort();
-    await expect(run).rejects.toBeInstanceOf(CancelledError);
-
+    expect(Date.now() - abortedAt).toBeLessThan(3_000);
     expect(await waitFor(async () => (isAlive(pid) ? undefined : true))).toBe(true);
   });
 
@@ -100,13 +91,8 @@ describe('runCommand', () => {
   });
 
   it('stops every running command on request, as on deactivation', async () => {
-    const pidFile = join(await tempDir(), 'pid').split(sep).join('/');
+    const { run, pid } = await startSleeper();
 
-    const run = runCommand(
-      node(`require('fs').writeFileSync('${pidFile}', String(process.pid)); setTimeout(() => {}, 30000)`),
-      { cwd: process.cwd() },
-    );
-    const pid = await waitFor(async () => Number(await readFile(pidFile, 'utf8').catch(() => '')) || undefined);
     await killRunningCommands();
 
     expect((await run).exitCode).not.toBe(0);

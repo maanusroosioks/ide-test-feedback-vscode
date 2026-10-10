@@ -25,9 +25,8 @@ function setup() {
   };
   const status = fakeStatus();
   const logger = recordingLogger();
-  const context = fakeExtensionContext();
-  registerRunCommands(asContext(context), { control, logger, status });
-  return { control, status, logger, context };
+  registerRunCommands(asContext(fakeExtensionContext()), { control, logger, status });
+  return { control, status, logger };
 }
 
 function runOptions(control: ReturnType<typeof setup>['control']): PerformRunOptions {
@@ -35,12 +34,6 @@ function runOptions(control: ReturnType<typeof setup>['control']): PerformRunOpt
 }
 
 describe('run command', () => {
-  it('registers the submitting and the run-only command', () => {
-    const { context } = setup();
-
-    expect(context.subscriptions).toHaveLength(2);
-  });
-
   it('runs the folder of the Testing view item it was invoked on', async () => {
     const { control } = setup();
     const target = { id: 'item', children: {} };

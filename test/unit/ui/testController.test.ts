@@ -17,6 +17,14 @@ import type { PerformRunOptions } from '../../../src/ui/runFolder';
 import { registerTestController } from '../../../src/ui/testController';
 import { RESCAN_DELAY_MS } from '../../../src/ui/testDiscovery';
 import {
+  classItemId,
+  declarationItemId,
+  fileItemId,
+  resultItemId,
+  suiteItemId,
+  testItemId,
+} from '../../../src/ui/testItemIds';
+import {
   fakeStatus,
   recordingLogger,
   registryWith,
@@ -130,11 +138,11 @@ function performRun(control: ReturnType<typeof setup>['control'], options: Parti
 
 const TEST_PATH = 'tests/test_math.py';
 
-const fileId = (relativePath = TEST_PATH): string => `${folderPath}::/${relativePath}`;
-const declId = (name: string, relativePath = TEST_PATH): string => `${fileId(relativePath)}::::${name}`;
-const resultId = (parentId: string, name: string): string => `${parentId}::run:${name}`;
-const suiteId = (suite: string): string => `${folderPath}::${suite}`;
-const suiteTestId = (name: string, suite: string): string => `${folderPath}::${suite}::${name}`;
+const fileId = (relativePath = TEST_PATH): string => fileItemId(folderPath, relativePath);
+const declId = (name: string, relativePath = TEST_PATH): string =>
+  declarationItemId(fileId(relativePath), undefined, name);
+const suiteId = (suite: string): string => suiteItemId(folderPath, suite);
+const suiteTestId = (name: string, suite: string): string => testItemId(folderPath, suite, name);
 
 function folderNode(controller: FakeTestController): FakeTestItem {
   return controller.items.get(folderPath)!;
@@ -217,15 +225,13 @@ describe('registerTestController — tree', () => {
 
     await discover(controller);
 
-    const javaFile = 'src/test/java/CalculatorTest.java';
-    const file = fileNode(controller, javaFile)!;
-    const nested = file.children.get(`${fileId(javaFile)}::CalculatorTest.Division`);
-    expect(file.children.ids()).toEqual([
-      `${fileId(javaFile)}::CalculatorTest::adds`,
-      `${fileId(javaFile)}::CalculatorTest.Division`,
-    ]);
+    const javaFileId = fileId('src/test/java/CalculatorTest.java');
+    const file = fileNode(controller, 'src/test/java/CalculatorTest.java')!;
+    const nestedId = classItemId(javaFileId, 'CalculatorTest.Division');
+    expect(file.children.ids()).toEqual([declarationItemId(javaFileId, 'CalculatorTest', 'adds'), nestedId]);
+    const nested = file.children.get(nestedId);
     expect(nested?.label).toBe('Division');
-    expect(nested?.children.ids()).toEqual([`${fileId(javaFile)}::CalculatorTest.Division::divides`]);
+    expect(nested?.children.ids()).toEqual([declarationItemId(javaFileId, 'CalculatorTest.Division', 'divides')]);
   });
 
   it('tells apart two tests declared under the same name by their order', async () => {
@@ -285,7 +291,7 @@ describe('registerTestController — tree', () => {
     workspace.workspaceFolders = [...workspace.workspaceFolders!, workspaceFolder(other, 'other', 1)];
     workspace.onDidChangeWorkspaceFolders.mock.calls[0][0]();
 
-    await vi.waitFor(() => expect(controller.items.get(other)?.children.ids()).toEqual([`${other}::/test_other.py`]));
+    await vi.waitFor(() => expect(controller.items.get(other)?.children.ids()).toEqual([fileItemId(other, 'test_other.py')]));
   });
 });
 
@@ -471,7 +477,7 @@ describe('performRun — results', () => {
     expect(run.outcomes.get(declId('test_subtract'))?.status).toBe('failed');
     expect(run.outcomes.get(declId('test_emptied'))).toEqual({ status: 'skipped' });
     // Ran, but declared nowhere in the file it was traced to.
-    expect(run.outcomes.get(resultId(fileId(), 'test_broken'))).toMatchObject({
+    expect(run.outcomes.get(resultItemId(fileId(), 'test_broken'))).toMatchObject({
       status: 'errored',
       message: new TestMessage('ERROR with no reported message.'),
     });
@@ -501,7 +507,7 @@ describe('performRun — results', () => {
 
     const [run] = controller.runs;
     expect(run.outcomes.get(declId('test_add'))?.status).toBe('failed');
-    expect(run.outcomes.get(resultId(fileId(), 'test_sub'))?.status).toBe('errored');
+    expect(run.outcomes.get(resultItemId(fileId(), 'test_sub'))?.status).toBe('errored');
   });
 
   it('points a failure message at the line from its stack trace', async () => {
@@ -539,7 +545,7 @@ describe('performRun — results', () => {
     await performRun(control);
 
     const declared = testNode(controller, 'test_add')!;
-    const cases = [resultId(declared.id, 'test_add[1-2]'), resultId(declared.id, 'test_add[2-3]')];
+    const cases = [resultItemId(declared.id, 'test_add[1-2]'), resultItemId(declared.id, 'test_add[2-3]')];
     expect(declared.children.ids()).toEqual(cases);
     expect(declared.children.get(cases[0])?.label).toBe('test_add[1-2]');
     expect(declared.children.get(cases[0])?.range).toEqual(declared.range);
@@ -595,7 +601,7 @@ describe('performRun — results', () => {
     await performRun(control);
 
     const declared = testNode(controller, 'test_add')!;
-    const runs = [resultId(declared.id, `${SUITE}::test_add`), resultId(declared.id, 'tests.test_other::test_add')];
+    const runs = [resultItemId(declared.id, `${SUITE}::test_add`), resultItemId(declared.id, 'tests.test_other::test_add')];
     expect(declared.children.ids()).toEqual(runs);
     expect(declared.children.get(runs[0])?.description).toBe('test_math');
     expect(declared.children.get(runs[1])?.description).toBe('test_other');
@@ -1040,29 +1046,29 @@ describe('run profile and folderFor', () => {
     });
   });
 
-  it('runs every folder the selection spans, each once', async () => {
+  /** Adds a second, empty workspace folder after the calculator, and sets up the controller over both. */
+  async function setupTwoFolders() {
     const other = workspaceFolder(await tempDir(), 'other', 1);
     workspace.workspaceFolders = [workspace.workspaceFolders![0], other];
-    const { controller } = setup();
+    const harness = setup();
     testsRan(PASSING);
-    const root = (folder: typeof other) => controller.items.get(folder.uri.fsPath)!;
+    const root = (folder: vscode.WorkspaceFolder) => harness.controller.items.get(folder.uri.fsPath)!;
+    return { ...harness, calculatorRoot: root(workspace.workspaceFolders[0]), other, otherRoot: root(other) };
+  }
 
-    await controller.profiles[0].handler(
-      new TestRunRequest([root(other), root(workspace.workspaceFolders[0]), root(other)]),
-    );
+  it('runs every folder the selection spans, each once', async () => {
+    const { controller, calculatorRoot, other, otherRoot } = await setupTwoFolders();
+
+    await controller.profiles[0].handler(new TestRunRequest([otherRoot, calculatorRoot, otherRoot]));
 
     expect(vi.mocked(runTests).mock.calls.map((call) => call[1])).toEqual([other.uri.fsPath, folderPath]);
   });
 
   it("keeps running the other folders when one folder's build fails", async () => {
-    const other = workspaceFolder(await tempDir(), 'other', 1);
-    workspace.workspaceFolders = [workspace.workspaceFolders![0], other];
-    const { controller, status } = setup();
-    testsRan(PASSING);
+    const { controller, status, calculatorRoot, otherRoot } = await setupTwoFolders();
     vi.mocked(runTests).mockRejectedValueOnce(new Error('mvn: command not found'));
-    const roots = workspace.workspaceFolders.map((folder) => controller.items.get(folder.uri.fsPath)!);
 
-    await controller.profiles[0].handler(new TestRunRequest(roots));
+    await controller.profiles[0].handler(new TestRunRequest([calculatorRoot, otherRoot]));
 
     expect(vi.mocked(runTests)).toHaveBeenCalledTimes(2);
     expect(status.error).toHaveBeenCalledWith('mvn: command not found');

@@ -182,13 +182,8 @@ function sampleEvidence(overrides: Partial<TestEvidencePayload> = {}): TestEvide
   };
 }
 
+// With no evidence, the exact-shape test above already rules out `source` and `testFiles`.
 describe('buildTestRunRequest — captured source', () => {
-  it('omits source entirely when no evidence was collected', () => {
-    const request = buildTestRunRequest(sampleRun(), metadata);
-
-    expect(request.results[0].source).toBeUndefined();
-  });
-
   it('attaches source index-aligned with the results, omitting it for an unlocated test', () => {
     const request = buildTestRunRequest(sampleRun(), metadata, sampleEvidence());
 
@@ -228,10 +223,6 @@ describe('buildTestRunRequest — captured source', () => {
         content: 'import pytest\n\ndef test_adds():\n    assert add(2, 3) == 5\n',
       },
     ]);
-  });
-
-  it('omits testFiles when no evidence was collected', () => {
-    expect(buildTestRunRequest(sampleRun(), metadata).testFiles).toBeUndefined();
   });
 
   it('carries no captureDisabled flag on an ordinary run', () => {

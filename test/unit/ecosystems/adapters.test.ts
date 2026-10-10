@@ -37,6 +37,13 @@ function simulateTool(behavior: ToolBehavior = () => {}): void {
   });
 }
 
+/** A project wrapper script's file name, and how it is invoked: through sh, one unzipped without its execute bit still runs. */
+function wrapperFor(name: string, windowsFile: string): { file: string; invocation: string } {
+  return process.platform === 'win32'
+    ? { file: windowsFile, invocation: windowsFile }
+    : { file: name, invocation: `sh ./${name}` };
+}
+
 function lastCommand(): { command: string; options: RunCommandOptions } {
   const [command, options] = vi.mocked(runCommand).mock.lastCall!;
   return { command, options };
@@ -119,26 +126,19 @@ describe('mavenJunitAdapter', () => {
     expect(result.run.results).toHaveLength(2);
     expect(logger.messages).toContainEqual(expect.stringContaining('TEST-broken.xml'));
   });
-});
-
-describe('mavenJunitAdapter — wrapper', () => {
-  const wrapper = process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw';
-  // Through sh, a wrapper unzipped without its execute bit still runs.
-  const wrapperInvocation = process.platform === 'win32' ? 'mvnw.cmd' : 'sh ./mvnw';
 
   it('prefers the project wrapper, so Maven need not be installed', async () => {
-    await writeTree(folder, { [wrapper]: '' });
+    const wrapper = wrapperFor('mvnw', 'mvnw.cmd');
+    await writeTree(folder, { [wrapper.file]: '' });
     simulateTool();
 
     await mavenJunitAdapter.run(folder, {});
 
-    expect(lastCommand().command).toBe(`${wrapperInvocation} -B test -Dmaven.test.failure.ignore=true`);
+    expect(lastCommand().command).toBe(`${wrapper.invocation} -B test -Dmaven.test.failure.ignore=true`);
   });
 });
 
 describe('gradleJunitAdapter', () => {
-  const wrapper = process.platform === 'win32' ? 'gradlew.bat' : 'gradlew';
-  const wrapperInvocation = process.platform === 'win32' ? 'gradlew.bat' : 'sh ./gradlew';
 
   it.each(['build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts'])(
     'detects a folder with %s',
@@ -150,12 +150,13 @@ describe('gradleJunitAdapter', () => {
   );
 
   it('prefers the project wrapper when there is one', async () => {
-    await writeTree(folder, { [wrapper]: '' });
+    const wrapper = wrapperFor('gradlew', 'gradlew.bat');
+    await writeTree(folder, { [wrapper.file]: '' });
     simulateTool();
 
     await gradleJunitAdapter.run(folder, {});
 
-    expect(lastCommand().command).toBe(`${wrapperInvocation} cleanTest test --continue`);
+    expect(lastCommand().command).toBe(`${wrapper.invocation} cleanTest test --continue`);
   });
 
   it('falls back to gradle on PATH without a wrapper, continuing past failing subprojects', async () => {
@@ -347,23 +348,17 @@ describe('dotnetTestAdapter', () => {
     expect(dirname(reportDirOf(command))).toBe(resolve(tmpdir()));
   });
 
-  it('targets the solution when it sits next to a project, which bare dotnet test refuses', async () => {
-    await writeTree(folder, { 'Calc.sln': '', 'Calc.csproj': '' });
-    simulateTool();
+  it.each(['Calc.sln', 'Calc.slnx'])(
+    'targets the solution %s when it sits next to a project, which bare dotnet test refuses',
+    async (solution) => {
+      await writeTree(folder, { [solution]: '', 'Calc.csproj': '' });
+      simulateTool();
 
-    await dotnetTestAdapter.run(folder, {});
+      await dotnetTestAdapter.run(folder, {});
 
-    expect(lastCommand().command).toMatch(/^dotnet test "Calc\.sln" --logger trx /);
-  });
-
-  it('targets an .slnx solution next to a project the same way', async () => {
-    await writeTree(folder, { 'Calc.slnx': '', 'Calc.csproj': '' });
-    simulateTool();
-
-    await dotnetTestAdapter.run(folder, {});
-
-    expect(lastCommand().command).toMatch(/^dotnet test "Calc\.slnx" --logger trx /);
-  });
+      expect(lastCommand().command.startsWith(`dotnet test "${solution}" --logger trx `)).toBe(true);
+    },
+  );
 
   it('finds a test project in its own folder when there is no solution', async () => {
     await writeTree(folder, { 'Calc/Calc.csproj': '', 'Calc.Tests/Calc.Tests.csproj': '' });
@@ -443,20 +438,15 @@ describe('dotnetTestAdapter', () => {
     expect(result.run.results).toHaveLength(6);
   });
 
-  it('explains a missing report rather than reporting zero tests', async () => {
-    simulateTool();
+  it.each([
+    ['no results directory', undefined],
+    ['a results directory with no TRX in it', { 'notes.txt': 'x' }],
+  ])('explains %s rather than reporting zero tests', async (_label, reports) => {
+    simulateTool(reports && writeReports(reports));
 
     const result = await dotnetTestAdapter.run(folder, {});
 
     expect(result.run.results).toEqual([]);
-    expect(result.reportError).toContain('no TRX report was written');
-  });
-
-  it('explains a results directory with no TRX in it', async () => {
-    simulateTool(writeReports({ 'notes.txt': 'x' }));
-
-    const result = await dotnetTestAdapter.run(folder, {});
-
     expect(result.reportError).toContain('no TRX report was written');
   });
 });

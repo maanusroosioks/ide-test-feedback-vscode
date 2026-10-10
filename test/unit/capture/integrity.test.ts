@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeDeclaration, unlocatedIntegrity } from '../../../src/capture/integrity';
+import { analyzeDeclaration } from '../../../src/capture/integrity';
 import type { SourceLanguage } from '../../../src/ecosystems';
 import { declaration, declarationNamed, declarations } from '../helpers/sourceFixtures';
 
@@ -127,11 +127,5 @@ describe('analyzeDeclaration — csharp', () => {
 
   it('flags an empty body', () => {
     expect(analyze('csharp', 'EmptyBody')).toMatchObject({ empty: true, assertionCount: 0 });
-  });
-});
-
-describe('unlocatedIntegrity', () => {
-  it('reports only that the test could not be found', () => {
-    expect(unlocatedIntegrity()).toEqual({ located: false });
   });
 });

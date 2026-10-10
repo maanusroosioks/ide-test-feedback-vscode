@@ -26,13 +26,13 @@ describe('normalizeTestName', () => {
 
 describe('matchDeclaration', () => {
   it.each([
-    ['test_add_returns_sum', 'test_calculator', 'test_add_returns_sum', undefined],
-    ['test_divide_returns_quotient[10-2-5]', 'test_calculator', 'test_divide_returns_quotient', undefined],
-    ['test_divide_returns_quotient[9-3-3]', 'test_calculator', 'test_divide_returns_quotient', undefined],
-  ])('python: %j in suite %j', (testName, suite, expectedName, expectedContainer) => {
-    const hit = matchDeclaration(python, testName, suite);
+    ['test_add_returns_sum', 'test_add_returns_sum'],
+    ['test_divide_returns_quotient[10-2-5]', 'test_divide_returns_quotient'],
+    ['test_divide_returns_quotient[9-3-3]', 'test_divide_returns_quotient'],
+  ])('python: matches %j to the module-level %j', (testName, expectedName) => {
+    const hit = matchDeclaration(python, testName, 'test_calculator');
     expect(hit?.name).toBe(expectedName);
-    expect(hit?.container).toBe(expectedContainer);
+    expect(hit?.container).toBeUndefined();
   });
 
   it('uses the suite class to pick between same-named tests in different classes', () => {

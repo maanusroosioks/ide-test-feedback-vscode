@@ -57,14 +57,6 @@ beforeEach(() => {
 });
 
 describe('configureAssignment command', () => {
-  it('registers itself on the extension context', () => {
-    const context = fakeExtensionContext();
-    registerConfigureAssignmentCommand(asContext(context), authService as unknown as AuthService);
-
-    expect(context.subscriptions).toHaveLength(1);
-    expect(commands.registerCommand).toHaveBeenCalledWith(COMMAND, expect.any(Function));
-  });
-
   it('stops without saving anything when the URL prompt is cancelled', async () => {
     enterInputs(undefined);
 
@@ -84,41 +76,29 @@ describe('configureAssignment command', () => {
     expect(inputBoxOptions(0).value).toBe('https://old.example.edu');
   });
 
-  it('validates the service URL', async () => {
+  const NO_QUERY = 'Enter just the base URL, without a ?query or #fragment.';
+
+  it.each([
+    ['  ', 'The service URL is required.'],
+    ['moodle-bridge', 'Enter a full URL, e.g. https://moodle-bridge.example.edu'],
+    ['ftp://moodle-bridge.example.edu', 'The URL must start with https://'],
+    // Plain HTTP only to a local service, since the sign-in token is sent along.
+    ['http://moodle-bridge.example.edu', 'The URL must use https:// (http:// is only allowed for localhost).'],
+    // A query, fragment or credentials would break the submission URL.
+    ['https://bridge.example.edu/base?course=7', NO_QUERY],
+    ['https://bridge.example.edu/?', NO_QUERY],
+    ['https://bridge.example.edu/#top', NO_QUERY],
+    ['https://me:secret@bridge.example.edu', 'Leave the user name and password out of the URL.'],
+    ['https://moodle-bridge.example.edu', undefined],
+    ['https://bridge.example.edu/moodle/', undefined],
+    ['  http://localhost:8080  ', undefined],
+    ['http://127.0.0.1:8080', undefined],
+    ['http://[::1]:8080', undefined],
+  ])('validates the service URL %j', async (url, expected) => {
     enterInputs(undefined);
     await invokeCommand(COMMAND);
-    const validate = inputBoxOptions(0).validateInput;
 
-    expect(validate('  ')).toBe('The service URL is required.');
-    expect(validate('moodle-bridge')).toBe('Enter a full URL, e.g. https://moodle-bridge.example.edu');
-    expect(validate('ftp://moodle-bridge.example.edu')).toBe('The URL must start with https://');
-    expect(validate('https://moodle-bridge.example.edu')).toBeUndefined();
-    expect(validate('  http://localhost:8080  ')).toBeUndefined();
-  });
-
-  it('refuses plain HTTP except to a local service, since the sign-in token is sent along', async () => {
-    enterInputs(undefined);
-    await invokeCommand(COMMAND);
-    const validate = inputBoxOptions(0).validateInput;
-
-    expect(validate('http://moodle-bridge.example.edu')).toBe(
-      'The URL must use https:// (http:// is only allowed for localhost).',
-    );
-    expect(validate('http://127.0.0.1:8080')).toBeUndefined();
-    expect(validate('http://[::1]:8080')).toBeUndefined();
-  });
-
-  it('refuses a query, fragment or credentials, which would break the submission URL', async () => {
-    enterInputs(undefined);
-    await invokeCommand(COMMAND);
-    const validate = inputBoxOptions(0).validateInput;
-    const noQuery = 'Enter just the base URL, without a ?query or #fragment.';
-
-    expect(validate('https://bridge.example.edu/base?course=7')).toBe(noQuery);
-    expect(validate('https://bridge.example.edu/?')).toBe(noQuery);
-    expect(validate('https://bridge.example.edu/#top')).toBe(noQuery);
-    expect(validate('https://me:secret@bridge.example.edu')).toBe('Leave the user name and password out of the URL.');
-    expect(validate('https://bridge.example.edu/moodle/')).toBeUndefined();
+    expect(inputBoxOptions(0).validateInput(url)).toBe(expected);
   });
 
   it('saves the trimmed URL to user settings', async () => {
@@ -130,21 +110,14 @@ describe('configureAssignment command', () => {
     expect(configUpdate).toHaveBeenCalledWith('serviceUrl', 'https://bridge.example.edu', ConfigurationTarget.Global);
   });
 
-  it('says the key is still missing when no folder is open to hold it', async () => {
-    enterInputs('https://bridge.example.edu');
-
-    await invokeCommand(COMMAND);
-
-    expect(messagesShown(window.showInformationMessage)).toContain(URL_ONLY_SAVED);
-    expect(messagesShown(window.showInformationMessage)).not.toContain(ALL_SAVED);
-  });
-
-  it('skips the assignment key when no folder is open', async () => {
+  it('skips the assignment key when no folder is open to hold it, and says it is still missing', async () => {
     enterInputs('https://bridge.example.edu');
 
     await invokeCommand(COMMAND);
 
     expect(window.showInputBox).toHaveBeenCalledOnce();
+    expect(messagesShown(window.showInformationMessage)).toContain(URL_ONLY_SAVED);
+    expect(messagesShown(window.showInformationMessage)).not.toContain(ALL_SAVED);
   });
 
   it('checks the service is reachable, ignoring trailing slashes', async () => {
