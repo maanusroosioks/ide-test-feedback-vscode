@@ -1,7 +1,6 @@
 import type { AdapterRegistry, ResolveAdapterOptions } from '../runner/registry';
 import type { TestRunnerAdapter } from '../runner/types';
 import type { NormalizedTestRun } from './types';
-import { getPreferredAdapterId, getTestCommandOverrides } from '../config/settings';
 import { MoodleSubmitError } from './errors';
 import type { Logger, RunSummary } from './ports';
 import type { OutputSink } from '../util/shell';
@@ -40,14 +39,16 @@ export interface RunTestsOptions {
   onOutput?: OutputSink;
   /** Asked only when a folder matches several frameworks. The UI layer supplies the prompt. */
   pickFromMultiple?: ResolveAdapterOptions['pickFromMultiple'];
+  preferredAdapterId?: string;
+  /** Keyed by adapter id. */
+  commandOverrides?: Record<string, string>;
 }
 
 export async function runTests(
   registry: AdapterRegistry,
   folderPath: string,
-  { logger, signal, onOutput, pickFromMultiple }: RunTestsOptions,
+  { logger, signal, onOutput, pickFromMultiple, preferredAdapterId, commandOverrides = {} }: RunTestsOptions,
 ): Promise<TestRunOutcome> {
-  const preferredAdapterId = getPreferredAdapterId(folderPath);
   const adapter = await registry.resolveAdapter(folderPath, { preferredAdapterId, pickFromMultiple });
 
   // A forced adapter bypasses detection, so flag one that doesn't fit the folder.
@@ -60,9 +61,8 @@ export async function runTests(
     logger.log(`Detected adapter: ${adapter.displayName}`);
   }
 
-  const overrides = getTestCommandOverrides(folderPath);
   const result = await adapter.run(folderPath, {
-    commandOverride: overrides[adapter.id],
+    commandOverride: commandOverrides[adapter.id],
     signal,
     onOutput,
     logger,

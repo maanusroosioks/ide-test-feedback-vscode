@@ -8,12 +8,14 @@ import { collectTestEvidence } from '../../../src/capture/evidence';
 import { TestFileFinder } from '../../../src/capture/discovery';
 import { locateResults, type SourceFileCache } from '../../../src/capture/sourceFiles';
 import { CancelledError } from '../../../src/core/errors';
-import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/submissionMetadata';
+import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/workspaceConfig';
 import { submitRun } from '../../../src/core/submitRun';
 import { runTests, type RunTestsOptions } from '../../../src/core/testRunner';
 import type { NormalizedTestCase } from '../../../src/core/types';
 import type { MoodleApiClient } from '../../../src/services/moodleApiClient';
-import { RESCAN_DELAY_MS, registerTestController, type PerformRunOptions } from '../../../src/ui/testController';
+import type { PerformRunOptions } from '../../../src/ui/runFolder';
+import { registerTestController } from '../../../src/ui/testController';
+import { RESCAN_DELAY_MS } from '../../../src/ui/testDiscovery';
 import {
   fakeStatus,
   recordingLogger,
@@ -1003,6 +1005,20 @@ describe('run profile and folderFor', () => {
     await controller.profiles[0].handler(new TestRunRequest());
 
     expect(vi.mocked(runTests).mock.calls[0][1]).toBe(folderPath);
+  });
+
+  it("hands the folder's adapter settings to the run", async () => {
+    configValues.set('preferredAdapter', 'pytest');
+    configValues.set('testCommandOverrides', { pytest: 'pytest -x' });
+    const { controller } = setup();
+    testsRan(PASSING);
+
+    await controller.profiles[0].handler(new TestRunRequest());
+
+    expect(vi.mocked(runTests).mock.calls[0][2]).toMatchObject({
+      preferredAdapterId: 'pytest',
+      commandOverrides: { pytest: 'pytest -x' },
+    });
   });
 
   it('runs every folder the selection spans, each once', async () => {

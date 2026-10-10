@@ -1,9 +1,9 @@
-import type { Dirent } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { extname, join, relative, sep } from 'node:path';
 import type { Platform } from '../core/types';
-import { languagesOf, PLATFORMS, SOURCE_LANGUAGES, type SourceLanguageProfile } from '../ecosystems';
-import { isInside, SHARED_IGNORED_DIRS } from './location';
+import { ignoredDirsFor, languagesOf, PLATFORMS, SOURCE_LANGUAGES, type SourceLanguageProfile } from '../ecosystems';
+import { readDirSafe } from '../util/fs';
+import { isInside, isWalkableDir } from '../util/paths';
 import type { SourceFile, SourceFileCache } from './sourceFiles';
 
 export interface DiscoveryLimits {
@@ -26,14 +26,7 @@ const SOURCE_EXTENSIONS = [...new Set(Object.values(SOURCE_LANGUAGES).flatMap((p
 /** Every file a finder could accept, for a file watcher to narrow its events to. */
 export const SOURCE_FILE_GLOB = `**/*.{${SOURCE_EXTENSIONS.map((ext) => ext.slice(1)).join(',')}}`;
 
-const ANY_IGNORED_DIR = new Set([
-  ...SHARED_IGNORED_DIRS,
-  ...Object.values(PLATFORMS).flatMap((platform) => platform.ignoredDirs),
-]);
-
-function isWalkable(dirName: string, ignored: Set<string>): boolean {
-  return !dirName.startsWith('.') && !ignored.has(dirName);
-}
+const ANY_IGNORED_DIR = ignoredDirsFor(Object.keys(PLATFORMS) as Platform[]);
 
 /** The path's segments below `folderPath`, or `undefined` when it isn't inside it. */
 function segmentsBelow(folderPath: string, path: string): string[] | undefined {
@@ -49,7 +42,7 @@ export function mayBeTestFolder(folderPath: string, path: string): boolean {
   const segments = segmentsBelow(folderPath, path);
   return (
     segments !== undefined &&
-    segments.every((segment) => isWalkable(segment, ANY_IGNORED_DIR)) &&
+    segments.every((segment) => isWalkableDir(segment, ANY_IGNORED_DIR)) &&
     !SOURCE_EXTENSIONS.includes(extname(path).toLowerCase())
   );
 }
@@ -65,7 +58,7 @@ export class TestFileFinder {
     readonly platforms: Platform[],
     private readonly limits: DiscoveryLimits = DISCOVERY_LIMITS,
   ) {
-    this.ignoredDirs = new Set([...SHARED_IGNORED_DIRS, ...platforms.flatMap((p) => PLATFORMS[p].ignoredDirs)]);
+    this.ignoredDirs = ignoredDirsFor(platforms);
     this.profileByExtension = new Map(
       platforms
         .flatMap(languagesOf)
@@ -78,7 +71,7 @@ export class TestFileFinder {
     const segments = segmentsBelow(this.folderPath, absolutePath);
     if (!segments) return false;
     const name = segments.pop() ?? '';
-    return segments.every((dir) => isWalkable(dir, this.ignoredDirs)) && this.accepts(name);
+    return segments.every((dir) => isWalkableDir(dir, this.ignoredDirs)) && this.accepts(name);
   }
 
   /** The file, if it is a test file that declares at least one test. */
@@ -116,19 +109,14 @@ export class TestFileFinder {
     const exhausted = (): boolean => found.length >= this.limits.maxFiles || visited >= this.limits.maxEntries;
 
     const walk = async (dir: string): Promise<void> => {
-      let entries: Dirent[];
-      try {
-        entries = await readdir(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
+      const entries = await readDirSafe(dir);
       entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
       for (const entry of entries) {
         if (exhausted()) return;
         visited++;
         // `isDirectory()` is false for symlinks, so the walk cannot loop.
         if (entry.isDirectory()) {
-          if (isWalkable(entry.name, this.ignoredDirs)) await walk(join(dir, entry.name));
+          if (isWalkableDir(entry.name, this.ignoredDirs)) await walk(join(dir, entry.name));
         } else if (entry.isFile() && this.accepts(entry.name)) {
           found.push(join(dir, entry.name));
         }

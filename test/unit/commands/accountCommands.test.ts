@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthService } from '../../../src/auth/authService';
-import { registerLoginCommand } from '../../../src/commands/login';
+import { registerAccountCommands } from '../../../src/commands/account';
 import { CancelledError } from '../../../src/core/errors';
-import { registerLogoutCommand } from '../../../src/commands/logout';
 import { registerShowOutputCommand } from '../../../src/commands/showOutput';
 import { getOutputChannel } from '../../../src/ui/outputChannel';
 import {
@@ -13,7 +12,7 @@ import {
 } from '../helpers/vscodeStub';
 
 function fakeAuth() {
-  return { login: vi.fn(async () => ({})), logout: vi.fn(async () => {}) };
+  return { login: vi.fn(async () => ({})) };
 }
 
 function asAuth(auth: ReturnType<typeof fakeAuth>): AuthService {
@@ -23,7 +22,7 @@ function asAuth(auth: ReturnType<typeof fakeAuth>): AuthService {
 describe('login command', () => {
   it('signs in and confirms it', async () => {
     const auth = fakeAuth();
-    registerLoginCommand(asContext(fakeExtensionContext()), asAuth(auth));
+    registerAccountCommands(asContext(fakeExtensionContext()), asAuth(auth));
 
     await invokeCommand('moodleSubmit.login');
 
@@ -34,7 +33,7 @@ describe('login command', () => {
   it('shows why sign-in failed', async () => {
     const auth = fakeAuth();
     auth.login.mockRejectedValue(new Error('User did not consent'));
-    registerLoginCommand(asContext(fakeExtensionContext()), asAuth(auth));
+    registerAccountCommands(asContext(fakeExtensionContext()), asAuth(auth));
 
     await invokeCommand('moodleSubmit.login');
 
@@ -45,7 +44,7 @@ describe('login command', () => {
   it('says nothing when the user dismisses the sign-in dialog', async () => {
     const auth = fakeAuth();
     auth.login.mockRejectedValue(new CancelledError());
-    registerLoginCommand(asContext(fakeExtensionContext()), asAuth(auth));
+    registerAccountCommands(asContext(fakeExtensionContext()), asAuth(auth));
 
     await invokeCommand('moodleSubmit.login');
 
@@ -55,15 +54,15 @@ describe('login command', () => {
 });
 
 describe('logout command', () => {
-  it('delegates to the auth service', async () => {
-    const auth = fakeAuth();
+  it('points the user at the Accounts menu to sign out', async () => {
     const context = fakeExtensionContext();
-    registerLogoutCommand(asContext(context), asAuth(auth));
+    registerAccountCommands(asContext(context), asAuth(fakeAuth()));
 
     await invokeCommand('moodleSubmit.logout');
 
-    expect(auth.logout).toHaveBeenCalledOnce();
-    expect(context.subscriptions).toHaveLength(1);
+    expect(window.showInformationMessage).toHaveBeenCalledOnce();
+    expect(window.showInformationMessage.mock.calls[0][0]).toContain('Accounts menu');
+    expect(context.subscriptions).toHaveLength(2);
   });
 });
 

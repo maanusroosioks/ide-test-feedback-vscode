@@ -109,7 +109,9 @@ capture off, or once the size budget is spent, a file is listed without its `con
 
 Deliberately **not** submitted: raw stack traces, absolute file paths (a path outside the
 workspace folder is reduced to its filename), and anything about your machine or account
-beyond the identity in your sign-in token.
+beyond the identity in your sign-in token. Paths inside a failure message are cleaned the same
+way: one inside the project becomes relative, and any other path in your home folder starts
+with `~`. Paths outside your home folder are sent unchanged.
 
 One flag is sent alongside the results, and only when it applies:
 

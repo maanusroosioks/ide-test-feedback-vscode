@@ -1,8 +1,10 @@
 import { readFile } from 'node:fs/promises';
-import { basename, isAbsolute, relative, sep } from 'node:path';
+import { basename, relative, sep } from 'node:path';
 import type { NormalizedTestRun, Platform } from '../core/types';
 import { languageForFile, scanTestDeclarations, type SourceLanguage } from '../ecosystems';
 import { matchDeclaration, type TestDeclaration } from '../scanning';
+import { getOrCreate } from '../util/maps';
+import { isInside } from '../util/paths';
 import type { SourceLocation, TestLocationResolver } from './location';
 
 export interface SourceFile {
@@ -22,11 +24,8 @@ function toLf(text: string): string {
 }
 
 function toRelative(folderPath: string, absolutePath: string): string {
-  const path = relative(folderPath, absolutePath);
-  if (!path || path.startsWith('..') || isAbsolute(path)) {
-    return basename(absolutePath);
-  }
-  return path.split(sep).join('/');
+  if (!isInside(folderPath, absolutePath)) return basename(absolutePath);
+  return relative(folderPath, absolutePath).split(sep).join('/');
 }
 
 /** One read and one scan per file, however many tests or callers ask for it. Instantiate per pass. */
@@ -41,12 +40,7 @@ export class SourceFileCache {
 
   /** `undefined` when the file can't be read. */
   load(absolutePath: string): Promise<SourceFile | undefined> {
-    let file = this.loaded.get(absolutePath);
-    if (!file) {
-      file = this.readAndScan(absolutePath);
-      this.loaded.set(absolutePath, file);
-    }
-    return file;
+    return getOrCreate(this.loaded, absolutePath, () => this.readAndScan(absolutePath));
   }
 
   private async readAndScan(absolutePath: string): Promise<SourceFile | undefined> {

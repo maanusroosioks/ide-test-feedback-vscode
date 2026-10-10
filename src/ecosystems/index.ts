@@ -48,6 +48,14 @@ export const SOURCE_LANGUAGES: Record<SourceLanguage, SourceLanguageProfile> = O
   ...Object.values(ECOSYSTEMS).map((ecosystem) => ecosystem.languages),
 ) as Record<HostedLanguage, SourceLanguageProfile>;
 
+/** Every platform's; each profile adds its own. Hidden folders are skipped too. */
+export const SHARED_IGNORED_DIRS = ['node_modules', 'dist', 'out'];
+
+/** Build output and environments that never hold a platform's tests or sources. */
+export function ignoredDirsFor(platforms: readonly Platform[]): Set<string> {
+  return new Set([...SHARED_IGNORED_DIRS, ...platforms.flatMap((platform) => PLATFORMS[platform].ignoredDirs)]);
+}
+
 /** The languages a platform's tests may be written in. */
 export function languagesOf(platform: Platform): SourceLanguage[] {
   return Object.keys(ECOSYSTEMS[platform].languages) as SourceLanguage[];

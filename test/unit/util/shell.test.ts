@@ -1,72 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFile } from 'node:fs/promises';
+import { join, resolve, sep } from 'node:path';
+import { describe, expect, it } from 'vitest';
 import { CancelledError } from '../../../src/core/errors';
-import {
-  anyExists,
-  cleanupReport,
-  commandExists,
-  killRunningCommands,
-  pathExists,
-  runCommand,
-  tempReportPath,
-} from '../../../src/util/shell';
-import { tempDir, writeTree } from '../helpers/fs';
-
-describe('anyExists', () => {
-  it('is true when at least one of the names is present', async () => {
-    const dir = await tempDir();
-    await writeTree(dir, { 'build.gradle.kts': '' });
-
-    expect(await anyExists(dir, ['build.gradle', 'build.gradle.kts'])).toBe(true);
-    expect(await anyExists(dir, ['pom.xml', 'pytest.ini'])).toBe(false);
-    expect(await anyExists(dir, [])).toBe(false);
-  });
-});
-
-describe('cleanupReport', () => {
-  let sandbox: string;
-  let fakeTmp: string;
-
-  // A regressed guard deletes recursively, so the temp dir it guards must be one we can lose.
-  beforeEach(async () => {
-    sandbox = await tempDir();
-    fakeTmp = join(sandbox, 'tmp');
-    await mkdir(fakeTmp);
-    for (const name of ['TMPDIR', 'TMP', 'TEMP']) vi.stubEnv(name, fakeTmp);
-  });
-
-  it('removes a report it created under the temp directory', async () => {
-    const path = tempReportPath('test', 'xml');
-    await writeFile(path, '<testsuites/>', 'utf8');
-
-    await cleanupReport(path);
-    expect(await pathExists(path)).toBe(false);
-  });
-
-  it('refuses paths outside the temp directory, including a same-prefix sibling', async () => {
-    // `<tmp>-sibling` shares a string prefix with `<tmp>` but is not inside it.
-    await writeTree(sandbox, { 'tmp-sibling/not-ours.xml': 'keep me' });
-    const path = join(sandbox, 'tmp-sibling', 'not-ours.xml');
-
-    await cleanupReport(path);
-    expect(await pathExists(path)).toBe(true);
-  });
-
-  it('refuses the temp directory itself', async () => {
-    await cleanupReport(fakeTmp);
-    expect(await pathExists(fakeTmp)).toBe(true);
-  });
-});
-
-describe('tempReportPath', () => {
-  it('never hands out the same path twice', () => {
-    const paths = new Set(Array.from({ length: 50 }, () => tempReportPath('pytest', 'xml')));
-    expect(paths.size).toBe(50);
-    expect(dirname([...paths][0])).toBe(resolve(tmpdir()));
-  });
-});
+import { commandExists, killRunningCommands, runCommand } from '../../../src/util/shell';
+import { tempDir } from '../helpers/fs';
 
 describe('runCommand', () => {
   // Double quotes outside, single inside: valid under both cmd.exe and sh.
@@ -80,6 +17,15 @@ describe('runCommand', () => {
 
     expect(result).toEqual({ exitCode: 3, stdout: 'out', stderr: 'err' });
   });
+
+  it("gives the command an empty stdin, so a test that reads input doesn't wait forever", async () => {
+    const result = await runCommand(
+      node("let n = 0; process.stdin.on('data', (d) => (n += d.length)); process.stdin.on('end', () => process.stdout.write('eof ' + n))"),
+      { cwd: process.cwd() },
+    );
+
+    expect(result.stdout).toBe('eof 0');
+  }, 10_000);
 
   it('reports exit code 0 on success', async () => {
     const result = await runCommand(node("process.stdout.write('ok')"), { cwd: process.cwd() });

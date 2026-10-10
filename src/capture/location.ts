@@ -1,8 +1,9 @@
-import { readdir } from 'node:fs/promises';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { pathExists } from '../util/shell';
+import { isAbsolute, resolve } from 'node:path';
+import { pathExists, readDirSafe } from '../util/fs';
+import { getOrCreate } from '../util/maps';
+import { isInside, isWalkableDir, samePath } from '../util/paths';
 import type { Platform } from '../core/types';
-import { PLATFORMS, type PlatformProfile, type StackFrame } from '../ecosystems';
+import { ignoredDirsFor, PLATFORMS, type PlatformProfile, type StackFrame } from '../ecosystems';
 
 export type { StackFrame };
 
@@ -15,21 +16,8 @@ export interface SourceLocation {
 export type ExistsFn = (path: string) => Promise<boolean>;
 export type ListDirsFn = (path: string) => Promise<string[]>;
 
-/** Every platform's; each profile adds its own. Hidden folders are skipped too. */
-export const SHARED_IGNORED_DIRS = ['node_modules', 'dist', 'out'];
-
 function hasDirectorySegment(file: string): boolean {
   return file.includes('/') || file.includes('\\');
-}
-
-/** Strictly inside: the folder itself is not. */
-export function isInside(folderPath: string, path: string): boolean {
-  const rel = relative(folderPath, path);
-  return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
-}
-
-export function samePath(a: string, b: string): boolean {
-  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
 interface IndexedFrame {
@@ -65,12 +53,7 @@ function classMatchesSuite(className: string | undefined, suite: string | undefi
 }
 
 async function defaultListDirs(path: string): Promise<string[]> {
-  try {
-    const entries = await readdir(path, { withFileTypes: true });
-    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
-  } catch {
-    return [];
-  }
+  return (await readDirSafe(path)).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 }
 
 export interface TestLocationResolverDeps {
@@ -100,12 +83,7 @@ export class TestLocationResolver {
 
   async resolveSuiteFile(testSuite: string | undefined): Promise<string | undefined> {
     if (!testSuite) return undefined;
-    let cached = this.suiteFiles.get(testSuite);
-    if (!cached) {
-      cached = this.probe(this.suiteCandidates(testSuite));
-      this.suiteFiles.set(testSuite, cached);
-    }
-    return cached;
+    return getOrCreate(this.suiteFiles, testSuite, () => this.probe(this.suiteCandidates(testSuite)));
   }
 
   /** Prefers a frame belonging to the suite itself, then the first resolvable frame, then the suite's file. */
@@ -129,14 +107,9 @@ export class TestLocationResolver {
     return fallback ?? (suiteFile ? { file: suiteFile } : undefined);
   }
 
-  private async resolveFrameFile(frame: StackFrame): Promise<string | undefined> {
+  private resolveFrameFile(frame: StackFrame): Promise<string | undefined> {
     const key = `${frame.className ?? ''}|${frame.file}`;
-    let cached = this.frameFiles.get(key);
-    if (!cached) {
-      cached = this.locateFrameFile(frame);
-      this.frameFiles.set(key, cached);
-    }
-    return cached;
+    return getOrCreate(this.frameFiles, key, () => this.locateFrameFile(frame));
   }
 
   private async locateFrameFile(frame: StackFrame): Promise<string | undefined> {
@@ -187,8 +160,8 @@ export class TestLocationResolver {
 
   private async moduleDirs(): Promise<string[]> {
     this.modules ??= this.listDirs(this.folderPath).then((dirs) => {
-      const ignored = new Set([...SHARED_IGNORED_DIRS, ...this.profile.ignoredDirs]);
-      return dirs.filter((name) => !name.startsWith('.') && !ignored.has(name));
+      const ignored = ignoredDirsFor([this.platform]);
+      return dirs.filter((name) => isWalkableDir(name, ignored));
     });
     return this.modules;
   }
@@ -199,11 +172,6 @@ export class TestLocationResolver {
    */
   private existsCached(path: string): Promise<boolean> {
     if (!isInside(this.folderPath, path)) return Promise.resolve(false);
-    let cached = this.existsCache.get(path);
-    if (!cached) {
-      cached = this.exists(path);
-      this.existsCache.set(path, cached);
-    }
-    return cached;
+    return getOrCreate(this.existsCache, path, () => this.exists(path));
   }
 }

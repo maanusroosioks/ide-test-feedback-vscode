@@ -2,7 +2,7 @@ import { utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { pathExists } from '../../../../src/util/shell';
+import { pathExists } from '../../../../src/util/fs';
 import {
   clearReportDirs,
   parseJUnitXml,
@@ -200,6 +200,29 @@ describe('clearReportDirs', () => {
 
     expect(await parseJUnitXmlDirectory(root, { reportDir: 'surefire-reports' })).toHaveLength(0);
     expect(await pathExists(join(root, 'mod-a', 'target', 'keep.xml'))).toBe(true);
+  });
+
+  it('never takes the project folder itself for a report dir, whatever it is named', async () => {
+    const root = join(await tempDir(), 'surefire-reports');
+    await writeTree(root, { 'src/Main.java': 'class Main {}' });
+
+    await clearReportDirs(root, 'surefire-reports');
+
+    expect(await pathExists(join(root, 'src', 'Main.java'))).toBe(true);
+  });
+
+  it('matches only below the project folder, never across its boundary', async () => {
+    // Opened at `…/build/test-results`, the project's own `test/` folder ends in `build/test-results/test`.
+    const root = join(await tempDir(), 'build', 'test-results');
+    await writeTree(root, {
+      'test/CalcTest.java': 'class CalcTest {}',
+      'mod/build/test-results/test/TEST-old.xml': MINIMAL_XML,
+    });
+
+    await clearReportDirs(root, 'build/test-results/test');
+
+    expect(await pathExists(join(root, 'test', 'CalcTest.java'))).toBe(true);
+    expect(await pathExists(join(root, 'mod', 'build', 'test-results', 'test'))).toBe(false);
   });
 
   it('refuses to clear the whole tree when given no directory to match', async () => {

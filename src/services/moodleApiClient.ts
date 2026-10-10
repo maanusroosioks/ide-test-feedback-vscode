@@ -48,16 +48,39 @@ export function serviceUrlProblem(value: string): string | undefined {
   return undefined;
 }
 
-type Attempt = { kind: 'unauthorized' } | { kind: 'done'; status: number; ok: boolean; bodyText: string };
+interface Reply {
+  status: number;
+  ok: boolean;
+  bodyText: string;
+}
+
+/** The parsed JSON, or the raw text when the body isn't JSON. */
+function parseBody(bodyText: string): unknown {
+  if (!bodyText) return bodyText;
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    return bodyText;
+  }
+}
 
 export class MoodleApiClient {
   constructor(private readonly options: MoodleApiClientOptions) {}
 
   async submitResults(payload: TestRunRequest): Promise<SubmitResult> {
-    return this.postWithRetry(payload, false);
+    const baseUrl = this.baseUrl();
+    let reply = await this.post(baseUrl, payload, { forceRefresh: false });
+    if (reply.status === 401) {
+      // The cached token may have expired: one retry with a fresh one, whose 401 is final.
+      reply = await this.post(baseUrl, payload, { forceRefresh: true });
+    }
+    if (!reply.ok) {
+      throw new HttpError(reply.status, reply.bodyText);
+    }
+    return { status: reply.status, body: parseBody(reply.bodyText) };
   }
 
-  private async postWithRetry(payload: TestRunRequest, isRetry: boolean): Promise<SubmitResult> {
+  private baseUrl(): string {
     const baseUrl = this.options.getBaseUrl().trim().replace(/\/+$/, '');
     if (!baseUrl) {
       throw new MissingServiceUrlError();
@@ -66,32 +89,16 @@ export class MoodleApiClient {
     if (problem) {
       throw new InvalidServiceUrlError(problem);
     }
-
-    const token = await this.options.getAccessToken({ forceRefresh: isRetry });
-    const attempt = await this.post(baseUrl, token, payload, isRetry);
-
-    if (attempt.kind === 'unauthorized') {
-      return this.postWithRetry(payload, true);
-    }
-
-    const { status, ok, bodyText } = attempt;
-    if (!ok) {
-      throw new HttpError(status, bodyText);
-    }
-
-    let body: unknown = bodyText;
-    if (bodyText) {
-      try {
-        body = JSON.parse(bodyText);
-      } catch {
-        // Not JSON: keep the raw text.
-      }
-    }
-    return { status, body };
+    return baseUrl;
   }
 
   /** The timeout spans reading the body too: a server can send headers and then stall. */
-  private async post(baseUrl: string, token: string, payload: TestRunRequest, isRetry: boolean): Promise<Attempt> {
+  private async post(
+    baseUrl: string,
+    payload: TestRunRequest,
+    { forceRefresh }: GetAccessTokenOptions,
+  ): Promise<Reply> {
+    const token = await this.options.getAccessToken({ forceRefresh });
     const controller = new AbortController();
     const timeoutMs = this.options.getTimeoutMs();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -107,12 +114,13 @@ export class MoodleApiClient {
         signal: controller.signal,
       });
 
-      if (response.status === 401 && !isRetry) {
-        // Releases the connection rather than leaving the unread body to the garbage collector.
+      if (response.status === 401 && !forceRefresh) {
+        // About to be retried, so its body goes unread: cancelling releases the connection rather
+        // than leaving it to the garbage collector.
         await response.body?.cancel().catch(() => {});
-        return { kind: 'unauthorized' };
+        return { status: response.status, ok: false, bodyText: '' };
       }
-      return { kind: 'done', status: response.status, ok: response.ok, bodyText: await response.text() };
+      return { status: response.status, ok: response.ok, bodyText: await response.text() };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new TimeoutError(`Request to ${baseUrl} timed out after ${timeoutMs}ms`);

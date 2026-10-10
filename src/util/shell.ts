@@ -1,7 +1,4 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { tmpdir } from 'node:os';
-import { access, rm } from 'node:fs/promises';
-import { join, resolve, sep } from 'node:path';
 import { CancelledError } from '../core/errors';
 
 export interface RunCommandResult {
@@ -78,7 +75,14 @@ export function runCommand(command: string, options: RunCommandOptions): Promise
 
     // Detached on POSIX so the command gets its own process group for killTree; on Windows that
     // would open a console window instead.
-    const child = spawn(command, { cwd, shell: true, windowsHide: true, detached: process.platform !== 'win32' });
+    // stdin ignored: nothing ever writes to it, and a test that reads input would wait on it forever.
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     running.add(child);
     const stdout = new OutputTail();
     const stderr = new OutputTail();
@@ -128,42 +132,4 @@ export function commandExists(name: string): Promise<boolean> {
   return new Promise((done) => {
     execFile(finder, [name], { windowsHide: true }, (error) => done(!error));
   });
-}
-
-export async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** True when any of `names` exists directly inside `folderPath`. */
-export async function anyExists(folderPath: string, names: string[]): Promise<boolean> {
-  const found = await Promise.all(names.map((name) => pathExists(join(folderPath, name))));
-  return found.includes(true);
-}
-
-/** Retries ride out the brief locks Windows antivirus and indexers put on freshly written files. */
-const RM_OPTIONS = { recursive: true, force: true, maxRetries: 3 } as const;
-
-export async function removeDir(path: string): Promise<void> {
-  await rm(path, RM_OPTIONS);
-}
-
-let reportCounter = 0;
-
-export function tempReportPath(adapterId: string, extension: string): string {
-  reportCounter += 1;
-  return resolve(tmpdir(), `moodle-submit-${adapterId}-${Date.now()}-${reportCounter}.${extension}`);
-}
-
-export async function cleanupReport(path: string): Promise<void> {
-  const normalized = resolve(path);
-  // Segment-wise: a bare prefix would also accept `<tmp>2/...` and tmpdir itself.
-  if (!normalized.startsWith(resolve(tmpdir()) + sep)) {
-    return;
-  }
-  await rm(normalized, RM_OPTIONS);
 }

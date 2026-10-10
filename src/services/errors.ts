@@ -15,11 +15,8 @@ export class InvalidServiceUrlError extends MoodleSubmitError {
 }
 
 export class NetworkError extends MoodleSubmitError {
-  constructor(
-    message: string,
-    public readonly cause: unknown,
-  ) {
-    super(message);
+  constructor(message: string, cause: unknown) {
+    super(message, { cause });
   }
 }
 

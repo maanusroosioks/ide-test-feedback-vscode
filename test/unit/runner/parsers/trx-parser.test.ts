@@ -55,6 +55,34 @@ describe('parseTrx — edge cases', () => {
     expect(parseTrx(report(outcome))[0]).toMatchObject({ testName: 'HangsForever', status: 'ERROR' });
   });
 
+  it.each(['PassedButRunAborted', 'Warning'])('reports a %s outcome as passed', (outcome) => {
+    expect(parseTrx(report(outcome))[0].status).toBe('PASSED');
+  });
+
+  it("reports each row of a data-driven test, not just the parent's summary", () => {
+    const results = parseTrx(`<TestRun>
+      <Results>
+        <UnitTestResult testId="t1" testName="Adds" outcome="Failed" resultType="DataDrivenTest">
+          <InnerResults>
+            <UnitTestResult testId="t1" testName="Adds (1,2)" outcome="Passed" resultType="DataDrivenDataRow" />
+            <UnitTestResult testId="t1" testName="Adds (2,2)" outcome="Failed" resultType="DataDrivenDataRow" />
+          </InnerResults>
+        </UnitTestResult>
+        <UnitTestResult testId="t2" testName="Subtracts" outcome="Passed" />
+      </Results>
+      <TestDefinitions>
+        <UnitTest id="t1"><TestMethod className="Calc.Tests" name="Adds" /></UnitTest>
+      </TestDefinitions>
+    </TestRun>`);
+
+    expect(results.map((r) => [r.testName, r.status])).toEqual([
+      ['Adds (1,2)', 'PASSED'],
+      ['Adds (2,2)', 'FAILED'],
+      ['Subtracts', 'PASSED'],
+    ]);
+    expect(results[0].testSuite).toBe('Calc.Tests');
+  });
+
   it('leaves the suite unset when a result has no matching definition', () => {
     expect(parseTrx(report('Passed'))[0].testSuite).toBeUndefined();
   });

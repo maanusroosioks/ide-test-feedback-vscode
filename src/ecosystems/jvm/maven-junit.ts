@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { defineAdapter } from '../../runner/define';
-import { pathExists } from '../../util/shell';
+import { pathExists } from '../../util/fs';
 import { junitReportDirs } from '../../runner/reports';
 import { wrapperInvocation } from './wrapper';
 

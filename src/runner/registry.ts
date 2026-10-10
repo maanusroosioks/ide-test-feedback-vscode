@@ -9,11 +9,8 @@ export interface ResolveAdapterOptions {
 }
 
 export class AdapterRegistry {
-  private readonly adapters: TestRunnerAdapter[] = [];
-
-  register(adapter: TestRunnerAdapter): void {
-    this.adapters.push(adapter);
-  }
+  /** In detection priority order. */
+  constructor(private readonly adapters: readonly TestRunnerAdapter[]) {}
 
   async detectAdapters(folderPath: string): Promise<TestRunnerAdapter[]> {
     const matches: TestRunnerAdapter[] = [];

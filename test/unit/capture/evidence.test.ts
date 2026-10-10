@@ -324,6 +324,22 @@ describe('collectTestEvidence — budget and opt-out', () => {
     expect(inFiles).toBeLessThanOrEqual(maxTotalChars);
   });
 
+  it('never cuts a file between the halves of a surrogate pair', () => {
+    const text = `x${'😀'.repeat(100)}`;
+    const located: LocatedResult[] = [
+      { file: { absolutePath: '/t.py', relativePath: 't.py', text, language: 'python', declarations: [] } },
+    ];
+    const loneHalf = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/;
+
+    for (let maxTotalChars = 60; maxTotalChars < 80; maxTotalChars++) {
+      const { payload } = collectTestEvidence(run([{ testName: 't', status: 'PASSED' }]), located, {
+        captureSource: true,
+        maxTotalChars,
+      });
+      expect(payload.files[0].content, `budget ${maxTotalChars}`).not.toMatch(loneHalf);
+    }
+  });
+
   it('leaves captureDisabled unset when capture is on', async () => {
     const { evidence } = await collect(three, PYTHON_FILES);
 

@@ -81,10 +81,16 @@ describe('buildTestRunRequest', () => {
     expect(() => buildTestRunRequest(sampleRun({ results }), metadata)).toThrow(InvalidPayloadError);
   });
 
-  it('throws InvalidPayloadError for a result with a blank test name', () => {
-    const run = sampleRun({ results: [{ testSuite: 'test_calculator', testName: '   ', status: 'PASSED' }] });
+  it.each([
+    ['blank', '   '],
+    ['emptied by sanitizing', '<>'],
+  ])('sends a %s test name as unnamed rather than failing the whole run', (_label, testName) => {
+    const run = sampleRun({ results: [{ testSuite: '<>', testName, status: 'PASSED' }] });
 
-    expect(() => buildTestRunRequest(run, metadata)).toThrow('Encountered a test result with a blank testName.');
+    const [result] = buildTestRunRequest(run, metadata).results;
+
+    expect(result.testName).toBe('(unnamed test)');
+    expect(result.testSuite).toBeUndefined();
   });
 
   it.each([
@@ -263,6 +269,42 @@ describe('buildTestRunRequest — captured source', () => {
 
     expect(request.results[0].source?.path).toHaveLength(1024);
     expect(request.testFiles?.[0].path).toHaveLength(1024);
+  });
+});
+
+describe('buildTestRunRequest — local paths in messages', () => {
+  const messageOf = (message: string, roots: { workspace: string; home?: string }): string | undefined =>
+    buildTestRunRequest(sampleRun({ results: [{ testName: 't', status: 'FAILED', message }] }), metadata, undefined, roots)
+      .results[0].message;
+
+  it('makes paths in the project relative and hides the rest of the home folder', () => {
+    const roots = { workspace: '/home/alice/proj', home: '/home/alice' };
+
+    expect(messageOf('FileNotFoundException: /home/alice/proj/data/in.txt', roots)).toBe(
+      'FileNotFoundException: data/in.txt',
+    );
+    expect(messageOf('cannot read /home/alice/.m2/settings.xml', roots)).toBe('cannot read ~/.m2/settings.xml');
+    expect(messageOf('cwd was /home/alice/proj', roots)).toBe('cwd was .');
+  });
+
+  it('leaves a path that only shares a prefix with a root', () => {
+    expect(messageOf('see /home/alice2/x and /home/alice/proj-old/y', { workspace: '/home/alice/proj', home: '/home/alice' }))
+      .toBe('see /home/alice2/x and ~/proj-old/y');
+  });
+
+  it('matches a Windows root in any case and with either separator', () => {
+    const roots = { workspace: 'c:\\Users\\Alice\\proj', home: 'C:\\Users\\Alice' };
+
+    expect(messageOf('at C:\\Users\\alice\\proj\\src\\Calc.cs and C:/Users/Alice/Downloads/x.cs', roots)).toBe(
+      'at src\\Calc.cs and ~/Downloads/x.cs',
+    );
+  });
+
+  it('leaves messages alone when no roots are given', () => {
+    expect(
+      buildTestRunRequest(sampleRun({ results: [{ testName: 't', status: 'FAILED', message: '/home/a/x' }] }), metadata)
+        .results[0].message,
+    ).toBe('/home/a/x');
   });
 });
 

@@ -1,11 +1,21 @@
 import { readFile } from 'node:fs/promises';
+import { XMLParser } from 'fast-xml-parser';
 import { describeError, MoodleSubmitError } from '../../core/errors';
 
 /** A report that could not be used — distinct from a run that had no tests. */
 export class ReportUnavailableError extends MoodleSubmitError {}
 
-/** For a result without a name: a blank one would make the gateway reject the whole run over one test. */
-export const UNNAMED_TEST = '(unnamed test)';
+/** Attributes come back as `@_name`, text as `#text`; `arrayTags` are arrays even when they occur once. */
+export function createReportParser(arrayTags: string[]): XMLParser {
+  return new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    textNodeName: '#text',
+    // Otherwise a message that happens to be numeric, like `Assert.Fail("42")`, arrives as a number.
+    parseTagValue: false,
+    isArray: (name) => arrayTags.includes(name),
+  });
+}
 
 export async function parseReportFile<T>(
   path: string,

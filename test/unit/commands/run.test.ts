@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { registerRunCommand } from '../../../src/commands/run';
+import { COMMANDS } from '../../../src/commands/ids';
+import { registerRunCommands } from '../../../src/commands/run';
 import { CancelledError, MoodleSubmitError } from '../../../src/core/errors';
-import type { MoodleTestControl, PerformRunOptions } from '../../../src/ui/testController';
+import type { PerformRunOptions } from '../../../src/ui/runFolder';
+import type { MoodleTestControl } from '../../../src/ui/testController';
 import { fakeStatus, recordingLogger } from '../helpers/fakes';
 import {
   asContext,
@@ -13,10 +15,10 @@ import {
   workspaceFolder,
 } from '../helpers/vscodeStub';
 
-const COMMAND = 'moodleSubmit.runAndSubmit';
+const COMMAND = COMMANDS.runAndSubmit;
 const folder = workspaceFolder('/work/calculator', 'calculator');
 
-function setup(submit = true) {
+function setup() {
   const control = {
     folderFor: vi.fn<MoodleTestControl['folderFor']>(() => undefined),
     performRun: vi.fn<MoodleTestControl['performRun']>(async () => {}),
@@ -24,7 +26,7 @@ function setup(submit = true) {
   const status = fakeStatus();
   const logger = recordingLogger();
   const context = fakeExtensionContext();
-  registerRunCommand(asContext(context), COMMAND, submit, control, logger, status);
+  registerRunCommands(asContext(context), { control, logger, status });
   return { control, status, logger, context };
 }
 
@@ -33,10 +35,10 @@ function runOptions(control: ReturnType<typeof setup>['control']): PerformRunOpt
 }
 
 describe('run command', () => {
-  it('registers under the given id', () => {
+  it('registers the submitting and the run-only command', () => {
     const { context } = setup();
 
-    expect(context.subscriptions).toHaveLength(1);
+    expect(context.subscriptions).toHaveLength(2);
   });
 
   it('runs the folder of the Testing view item it was invoked on', async () => {
@@ -59,11 +61,14 @@ describe('run command', () => {
     expect(runOptions(control).folder).toBe(folder);
   });
 
-  it.each([true, false])('passes submit=%s through', async (submit) => {
-    const { control } = setup(submit);
+  it.each([
+    [COMMANDS.runAndSubmit, true],
+    [COMMANDS.runTestsOnly, false],
+  ])('%s passes submit=%s through', async (command, submit) => {
+    const { control } = setup();
     workspace.workspaceFolders = [folder];
 
-    await invokeCommand(COMMAND);
+    await invokeCommand(command);
 
     expect(runOptions(control).submit).toBe(submit);
   });

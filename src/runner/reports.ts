@@ -1,25 +1,9 @@
 import type { Logger } from '../core/ports';
 import type { NormalizedTestCase } from '../core/types';
-import { cleanupReport, tempReportPath } from '../util/shell';
+import { join } from 'node:path';
+import { cleanupReport, makeReportDir } from '../util/fs';
 import type { PreparedRun } from './define';
 import { clearReportDirs, parseJUnitXmlDirectory } from './parsers/junit-xml-parser';
-
-export interface TempFileReportOptions {
-  adapterId: string;
-  extension: string;
-  command(reportPath: string): string;
-  parse(reportPath: string): Promise<NormalizedTestCase[]>;
-}
-
-/** For a tool that is told where to write its one report: a fresh temp file per run, removed on cleanup. */
-export function tempFileReport({ adapterId, extension, command, parse }: TempFileReportOptions): PreparedRun {
-  const reportPath = tempReportPath(adapterId, extension);
-  return {
-    command: command(reportPath),
-    parse: () => parse(reportPath),
-    cleanup: () => cleanupReport(reportPath),
-  };
-}
 
 export interface TempDirReportOptions {
   adapterId: string;
@@ -28,13 +12,30 @@ export interface TempDirReportOptions {
 }
 
 /** For a tool that names its own report files: a fresh temp directory per run, removed on cleanup. */
-export function tempDirReport({ adapterId, command, parse }: TempDirReportOptions): PreparedRun {
-  const reportDir = tempReportPath(adapterId, 'reports');
+export async function tempDirReport({ adapterId, command, parse }: TempDirReportOptions): Promise<PreparedRun> {
+  const reportDir = await makeReportDir(adapterId);
   return {
     command: command(reportDir),
     parse: () => parse(reportDir),
     cleanup: () => cleanupReport(reportDir),
   };
+}
+
+export interface TempFileReportOptions {
+  adapterId: string;
+  extension: string;
+  command(reportPath: string): string;
+  parse(reportPath: string): Promise<NormalizedTestCase[]>;
+}
+
+/** For a tool that is told where to write its one report: a single file in {@link tempDirReport}'s directory. */
+export function tempFileReport({ adapterId, extension, command, parse }: TempFileReportOptions): Promise<PreparedRun> {
+  const reportFile = (reportDir: string): string => join(reportDir, `report.${extension}`);
+  return tempDirReport({
+    adapterId,
+    command: (reportDir) => command(reportFile(reportDir)),
+    parse: (reportDir) => parse(reportFile(reportDir)),
+  });
 }
 
 export interface JUnitReportDirsOptions {

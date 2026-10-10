@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { vi } from 'vitest';
 import type { Logger } from '../../../src/core/ports';
-import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/submissionMetadata';
+import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/workspaceConfig';
 import type { NormalizedTestCase, NormalizedTestRun } from '../../../src/core/types';
 import { AdapterRegistry } from '../../../src/runner/registry';
 import type { TestRunnerAdapter } from '../../../src/runner/types';
@@ -39,9 +39,7 @@ export function stubAdapter(id: string, overrides: Partial<TestRunnerAdapter> = 
 }
 
 export function registryWith(...adapters: TestRunnerAdapter[]): AdapterRegistry {
-  const registry = new AdapterRegistry();
-  adapters.forEach((adapter) => registry.register(adapter));
-  return registry;
+  return new AdapterRegistry(adapters);
 }
 
 export async function writeWorkspaceConfig(folderPath: string, config: object): Promise<void> {

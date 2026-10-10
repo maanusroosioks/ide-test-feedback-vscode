@@ -1,12 +1,10 @@
+import { homedir } from 'node:os';
 import type { MoodleApiClient, SubmitResult } from '../services/moodleApiClient';
 import type { Logger } from './ports';
 import { buildTestRunRequest } from './payload';
-import {
-  readGitCommitHash,
-  readGitRemoteUrl,
-  readWorkspaceConfigFile,
-  resolveSubmissionMetadata,
-} from './submissionMetadata';
+import { readGitCommitHash, readGitRemoteUrl } from './git';
+import { resolveSubmissionMetadata } from './submissionMetadata';
+import { readWorkspaceConfigFile } from './workspaceConfig';
 import type { TestEvidencePayload } from '../capture/evidence';
 import type { NormalizedTestRun } from './types';
 
@@ -39,7 +37,7 @@ export async function submitRun(
     gitRemoteUrl,
   });
 
-  const payload = buildTestRunRequest(run, metadata, evidence);
+  const payload = buildTestRunRequest(run, metadata, evidence, { workspace: folderPath, home: homedir() });
   const response = await apiClient.submitResults(payload);
   logger.log(`Submission service responded ${response.status}: ${JSON.stringify(response.body)}`);
   return response;

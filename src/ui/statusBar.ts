@@ -1,41 +1,36 @@
 import * as vscode from 'vscode';
 import type { RunSummary, StatusReporter } from '../core/ports';
+import { COMMANDS } from '../commands/ids';
 
 export type DisposableStatusReporter = StatusReporter & vscode.Disposable;
 
 export function createStatusReporter(): DisposableStatusReporter {
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-  item.command = 'moodleSubmit.showOutput';
+  item.command = COMMANDS.showOutput;
 
-  const idle = (): void => {
-    item.text = '$(beaker) Moodle Submit';
-    item.tooltip = undefined;
-    item.backgroundColor = undefined;
+  const show = (text: string, { tooltip, isError = false }: { tooltip?: string; isError?: boolean } = {}): void => {
+    item.text = text;
+    item.tooltip = tooltip;
+    item.backgroundColor = isError ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
   };
+  const idle = (): void => show('$(beaker) Moodle Submit');
 
   idle();
   item.show();
 
   return {
     running(): void {
-      item.text = '$(sync~spin) Running tests…';
-      item.tooltip = undefined;
-      item.backgroundColor = undefined;
+      show('$(sync~spin) Running tests…');
     },
     result(summary: RunSummary): void {
-      const allPassed = summary.failed === 0;
-      item.text = allPassed
-        ? `$(check) ${summary.passed}/${summary.total} passed`
-        : `$(x) ${summary.failed}/${summary.total} failed`;
-      item.tooltip = undefined;
-      item.backgroundColor = allPassed
-        ? undefined
-        : new vscode.ThemeColor('statusBarItem.errorBackground');
+      if (summary.failed === 0) {
+        show(`$(check) ${summary.passed}/${summary.total} passed`);
+      } else {
+        show(`$(x) ${summary.failed}/${summary.total} failed`, { isError: true });
+      }
     },
     error(message: string): void {
-      item.text = '$(error) Moodle submit failed';
-      item.tooltip = message;
-      item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+      show('$(error) Moodle submit failed', { tooltip: message, isError: true });
     },
     idle,
     dispose(): void {

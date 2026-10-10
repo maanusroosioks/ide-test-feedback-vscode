@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '../../../src/auth/authService';
 import { CancelledError } from '../../../src/core/errors';
-import { authentication, window } from '../helpers/vscodeStub';
+import { authentication } from '../helpers/vscodeStub';
 
 const SCOPES = ['User.Read'];
 
@@ -63,12 +63,5 @@ describe('AuthService', () => {
 
     expect(await service.getAccessToken({ forceRefresh: true })).toBe('fresh-token');
     expect(authentication.getSession).toHaveBeenCalledWith('microsoft', SCOPES, { forceNewSession: true });
-  });
-
-  it('points the user at the Accounts menu to sign out', async () => {
-    await service.logout();
-
-    expect(window.showInformationMessage).toHaveBeenCalledOnce();
-    expect(window.showInformationMessage.mock.calls[0][0]).toContain('Accounts menu');
   });
 });

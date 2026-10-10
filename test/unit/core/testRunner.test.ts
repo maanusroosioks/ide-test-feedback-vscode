@@ -3,7 +3,6 @@ import type { AdapterRunResult, RunOptions, TestRunnerAdapter } from '../../../s
 import { NoTestResultsError, runTests } from '../../../src/core/testRunner';
 import type { NormalizedTestCase } from '../../../src/core/types';
 import { recordingLogger, registryWith, stubAdapter, testRun, type RecordingLogger } from '../helpers/fakes';
-import { configValues } from '../helpers/vscodeStub';
 
 interface FakeAdapterOptions {
   id?: string;
@@ -72,12 +71,16 @@ describe('runTests', () => {
   });
 
   it("passes the adapter's own command override, signal and output sink through", async () => {
-    configValues.set('testCommandOverrides', { fake: 'pytest -x', other: 'mvn verify' });
     const { adapter, runOptions } = fakeAdapter({ results: MIXED_RESULTS });
     const signal = new AbortController().signal;
     const onOutput = vi.fn();
 
-    await runTests(registryWith(adapter), '/work', { logger, signal, onOutput });
+    await runTests(registryWith(adapter), '/work', {
+      logger,
+      signal,
+      onOutput,
+      commandOverrides: { fake: 'pytest -x', other: 'mvn verify' },
+    });
 
     expect(runOptions[0]).toMatchObject({ commandOverride: 'pytest -x', signal, onOutput, logger });
   });
@@ -120,22 +123,20 @@ describe('runTests', () => {
     expect(first.runOptions).toHaveLength(0);
   });
 
-  it('honors the preferredAdapter setting over detection', async () => {
-    configValues.set('preferredAdapter', 'second');
+  it('honors a preferred adapter over detection', async () => {
     const first = fakeAdapter({ id: 'first', results: MIXED_RESULTS });
     const second = fakeAdapter({ id: 'second', results: MIXED_RESULTS });
 
-    await runTests(registryWith(first.adapter, second.adapter), '/work', { logger });
+    await runTests(registryWith(first.adapter, second.adapter), '/work', { logger, preferredAdapterId: 'second' });
 
     expect(second.runOptions).toHaveLength(1);
     expect(logger.messages).toContain('Detected adapter: Fake second');
   });
 
   it("warns when the forced adapter doesn't fit the folder", async () => {
-    configValues.set('preferredAdapter', 'fake');
     const { adapter } = fakeAdapter({ detects: false, results: MIXED_RESULTS });
 
-    await runTests(registryWith(adapter), '/work', { logger });
+    await runTests(registryWith(adapter), '/work', { logger, preferredAdapterId: 'fake' });
 
     expect(logger.messages).toContainEqual(
       expect.stringMatching(/^Warning: moodleSubmit\.preferredAdapter forces Fake fake/),

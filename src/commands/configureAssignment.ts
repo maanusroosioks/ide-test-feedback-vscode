@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import type { AuthService } from '../auth/authService';
 import { getRequestTimeoutMs, getServiceUrl, setServiceUrl } from '../config/settings';
-import { WORKSPACE_CONFIG_FILE_NAME } from '../core/submissionMetadata';
+import { WORKSPACE_CONFIG_FILE_NAME } from '../core/workspaceConfig';
 import { serviceUrlProblem } from '../services/moodleApiClient';
 import { promptAndSaveAssignmentKey } from '../ui/assignmentKey';
 import { pickWorkspaceFolder } from '../ui/workspacePicker';
+import { COMMANDS } from './ids';
 
 async function reportReachability(baseUrl: string): Promise<void> {
   const url = baseUrl.replace(/\/+$/, '');
@@ -27,7 +28,7 @@ export function registerConfigureAssignmentCommand(
   authService: AuthService,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('moodleSubmit.configureAssignment', async () => {
+    vscode.commands.registerCommand(COMMANDS.configureAssignment, async () => {
       const serviceUrl = await vscode.window.showInputBox({
         prompt: 'Moodle submission service URL',
         placeHolder: 'https://moodle-bridge.example.edu',
@@ -54,7 +55,7 @@ export function registerConfigureAssignmentCommand(
           'Later',
         );
         if (choice === 'Sign in') {
-          await vscode.commands.executeCommand('moodleSubmit.login');
+          await vscode.commands.executeCommand(COMMANDS.login);
         }
       }
 

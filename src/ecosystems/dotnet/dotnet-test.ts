@@ -1,37 +1,31 @@
 import type { Dirent } from 'node:fs';
-import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MoodleSubmitError } from '../../core/errors';
 import { defineAdapter } from '../../runner/define';
 import { parseTrxDirectory } from '../../runner/parsers/trx-parser';
 import { tempDirReport } from '../../runner/reports';
+import { readDirSafe } from '../../util/fs';
+import { isWalkableDir } from '../../util/paths';
+import { dotnetPlatform } from './platform';
 
 /** `.slnx` is what `dotnet new sln` writes on newer SDKs. */
 const SOLUTION_EXTENSIONS = ['.sln', '.slnx'];
 const PROJECT_EXTENSIONS = ['.csproj', ...SOLUTION_EXTENSIONS];
 
-/** How test projects are conventionally named, e.g. `Calculator.Tests.csproj`. */
-const TEST_PROJECT = /tests?\.csproj$/i;
+/** `Calc.Tests.csproj`, `Calc_Test.csproj`, `CalcTests.csproj`, `Tests.csproj` — not `Latest.csproj`. */
+const TEST_PROJECT = /(?:^|[._-]|[a-z\d](?=T))[Tt]ests?\.csproj$/;
+
+const IGNORED_DIRS = new Set(dotnetPlatform.ignoredDirs);
 
 const isSolution = (name: string): boolean => SOLUTION_EXTENSIONS.some((ext) => name.endsWith(ext));
 const isProjectFile = (name: string): boolean => PROJECT_EXTENSIONS.some((ext) => name.endsWith(ext));
 
-async function entriesOf(dir: string): Promise<Dirent[]> {
-  try {
-    return await readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-
 /** A layout without a solution keeps each project in its own folder: `Calculator.Tests/Calculator.Tests.csproj`. */
 async function nestedTestProjects(folderPath: string, entries: Dirent[]): Promise<string[]> {
-  const folders = entries.filter(
-    (entry) => entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'bin' && entry.name !== 'obj',
-  );
+  const folders = entries.filter((entry) => entry.isDirectory() && isWalkableDir(entry.name, IGNORED_DIRS));
   const nested = await Promise.all(
     folders.map(async (folder) =>
-      (await entriesOf(join(folderPath, folder.name)))
+      (await readDirSafe(join(folderPath, folder.name)))
         .filter((entry) => entry.isFile() && TEST_PROJECT.test(entry.name))
         .map((entry) => `${folder.name}/${entry.name}`),
     ),
@@ -47,7 +41,7 @@ interface DotnetTargets {
 }
 
 async function findTargets(folderPath: string): Promise<DotnetTargets> {
-  const entries = await entriesOf(folderPath);
+  const entries = await readDirSafe(folderPath);
   const root = entries.filter((entry) => entry.isFile() && isProjectFile(entry.name)).map((entry) => entry.name);
   return { root, nested: root.length > 0 ? [] : await nestedTestProjects(folderPath, entries) };
 }

@@ -1,9 +1,8 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { XMLParser } from 'fast-xml-parser';
-import type { NormalizedTestCase, TestStatus } from '../../core/types';
+import { UNNAMED_TEST, type NormalizedTestCase, type TestStatus } from '../../core/types';
 import { describeError } from '../../core/errors';
-import { parseReportFile, ReportUnavailableError, UNNAMED_TEST } from './report-file';
+import { createReportParser, parseReportFile, ReportUnavailableError } from './report-file';
 
 interface TrxErrorInfo {
   Message?: string;
@@ -18,6 +17,7 @@ interface TrxUnitTestResult {
   Output?: {
     ErrorInfo?: TrxErrorInfo;
   };
+  InnerResults?: { UnitTestResult?: TrxUnitTestResult[] };
 }
 
 interface TrxUnitTest {
@@ -25,14 +25,7 @@ interface TrxUnitTest {
   TestMethod?: { '@_className'?: string; '@_name'?: string };
 }
 
-const parser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  textNodeName: '#text',
-  // Otherwise a message that happens to be numeric, like `Assert.Fail("42")`, arrives as a number.
-  parseTagValue: false,
-  isArray: (name) => name === 'UnitTestResult' || name === 'UnitTest',
-});
+const parser = createReportParser(['UnitTestResult', 'UnitTest']);
 
 function parseTrxDuration(duration?: string): number | undefined {
   if (!duration) return undefined;
@@ -45,6 +38,8 @@ function parseTrxDuration(duration?: string): number | undefined {
 function mapOutcome(outcome: string): TestStatus {
   switch (outcome) {
     case 'Passed':
+    case 'PassedButRunAborted':
+    case 'Warning':
       return 'PASSED';
     case 'Failed':
       return 'FAILED';
@@ -55,6 +50,14 @@ function mapOutcome(outcome: string): TestStatus {
   }
 }
 
+/** A data-driven MSTest reports one parent result with a row per data set under it; the rows are the tests. */
+function flattenDataRows(results: TrxUnitTestResult[]): TrxUnitTestResult[] {
+  return results.flatMap((result) => {
+    const rows = result.InnerResults?.UnitTestResult ?? [];
+    return rows.length > 0 ? flattenDataRows(rows) : [result];
+  });
+}
+
 export function parseTrx(xml: string): NormalizedTestCase[] {
   const doc = parser.parse(xml);
   // As in parseJUnitXml: a missing root means an unusable file, not an empty run.
@@ -62,7 +65,7 @@ export function parseTrx(xml: string): NormalizedTestCase[] {
     throw new Error('no <TestRun> element found — this is not a TRX report');
   }
   const testRun = doc.TestRun;
-  const results: TrxUnitTestResult[] = testRun.Results?.UnitTestResult ?? [];
+  const results = flattenDataRows(testRun.Results?.UnitTestResult ?? []);
   const definitions: TrxUnitTest[] = testRun.TestDefinitions?.UnitTest ?? [];
 
   const classNameById = new Map<string, string | undefined>();

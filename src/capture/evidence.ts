@@ -1,11 +1,6 @@
-import {
-  analyzeDeclaration,
-  unlocatedIntegrity,
-  type TestIntegrity,
-  type TestIntegrityEntry,
-} from './integrity';
+import { analyzeDeclaration, unlocatedIntegrity, type TestIntegrityEntry } from './integrity';
 import type { LocatedResult, SourceFile } from './sourceFiles';
-import type { NormalizedTestRun } from '../core/types';
+import type { NormalizedTestCase, NormalizedTestRun } from '../core/types';
 import { REQUEST_LIMITS } from '../services/httpTypes';
 
 /** Workspace-relative, forward slashes — never absolute, which would leak the student's username. */
@@ -74,60 +69,41 @@ function noticeReserve(text: string): number {
 
 function capText(text: string, limit: number): { text: string; truncated: boolean } {
   if (text.length <= limit) return { text, truncated: false };
-  const removed = text.length - limit;
-  return { text: `${text.slice(0, limit)}${truncationNotice(removed)}`, truncated: true };
+  // Never between the halves of a surrogate pair, which would send half an emoji.
+  const end = /[\uD800-\uDBFF]/.test(text[limit - 1] ?? '') ? limit - 1 : limit;
+  const removed = text.length - end;
+  return { text: `${text.slice(0, end)}${truncationNotice(removed)}`, truncated: true };
 }
 
-/** `located` is index-aligned with `run.results`, as `locateResults` returns it. */
-export function collectTestEvidence(
-  run: NormalizedTestRun,
-  located: LocatedResult[],
-  options: CaptureOptions,
-): TestEvidence {
-  const sources: TestSource[] = [];
-  const integrity: TestIntegrityEntry[] = [];
+function sourceOf({ file, declaration }: LocatedResult): TestSource {
+  if (!file) return { kind: 'NONE' };
+  if (!declaration) return { kind: 'FILE', filePath: file.relativePath };
+  return { kind: 'TEST', filePath: file.relativePath, startLine: declaration.startLine, endLine: declaration.endLine };
+}
 
-  run.results.forEach((testCase, index) => {
-    const record = (source: TestSource, signals: TestIntegrity): void => {
-      sources.push(source);
-      integrity.push({ testSuite: testCase.testSuite, testName: testCase.testName, integrity: signals });
-    };
+function integrityOf(testCase: NormalizedTestCase, { file, declaration }: LocatedResult): TestIntegrityEntry {
+  return {
+    testSuite: testCase.testSuite,
+    testName: testCase.testName,
+    integrity: file && declaration ? analyzeDeclaration(declaration, file.language) : unlocatedIntegrity(),
+  };
+}
 
-    const { file, declaration } = located[index] ?? {};
-    if (!file) {
-      record({ kind: 'NONE' }, unlocatedIntegrity());
-    } else if (!declaration) {
-      record({ kind: 'FILE', filePath: file.relativePath }, unlocatedIntegrity());
-    } else {
-      record(
-        {
-          kind: 'TEST',
-          filePath: file.relativePath,
-          startLine: declaration.startLine,
-          endLine: declaration.endLine,
-        },
-        analyzeDeclaration(declaration, file.language),
-      );
-    }
-  });
-
-  // Sorted before the budget is charged, so which files keep their content does not depend on
-  // the order the tests ran in.
+/**
+ * Each distinct test file once, up to the request's limit. Sorted before the budget is charged,
+ * so which files keep their content does not depend on the order the tests ran in.
+ */
+function selectFiles(located: LocatedResult[]): SourceFile[] {
   const distinct = new Set(located.flatMap((entry): SourceFile[] => (entry.file ? [entry.file] : [])));
-  const sourceFiles = [...distinct]
+  return [...distinct]
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
     .slice(0, REQUEST_LIMITS.testFiles);
+}
 
-  // A source must never name a file the payload leaves out, or the grader has nothing to join it to.
-  const keptPaths = new Set(sourceFiles.map((file) => file.relativePath));
-  const payloadSources = sources.map(
-    (source): TestSource =>
-      source.kind === 'NONE' || keptPaths.has(source.filePath) ? source : { kind: 'NONE' },
-  );
-
+/** Fills in each file's content, in order, until the budget runs out; the rest go without. */
+function captureContents(files: SourceFile[], options: CaptureOptions): TestSourceFile[] {
   let budget = Math.max(0, options.maxTotalChars);
-  const files: TestSourceFile[] = [];
-  for (const file of sourceFiles) {
+  return files.map((file) => {
     const entry: TestSourceFile = { path: file.relativePath };
     const room = budget - noticeReserve(file.text);
     if (options.captureSource && room > 0) {
@@ -136,11 +112,30 @@ export function collectTestEvidence(
       if (capped.truncated) entry.truncated = true;
       budget -= capped.text.length;
     }
-    files.push(entry);
-  }
+    return entry;
+  });
+}
+
+/** `located` is index-aligned with `run.results`, as `locateResults` returns it. */
+export function collectTestEvidence(
+  run: NormalizedTestRun,
+  located: LocatedResult[],
+  options: CaptureOptions,
+): TestEvidence {
+  const files = selectFiles(located);
+  // A source must never name a file the payload leaves out, or the grader has nothing to join it to.
+  const keptPaths = new Set(files.map((file) => file.relativePath));
+  const sources = run.results.map((_, index): TestSource => {
+    const source = sourceOf(located[index] ?? {});
+    return source.kind === 'NONE' || keptPaths.has(source.filePath) ? source : { kind: 'NONE' };
+  });
 
   return {
-    payload: { sources: payloadSources, files, captureDisabled: options.captureSource ? undefined : true },
-    integrity,
+    payload: {
+      sources,
+      files: captureContents(files, options),
+      captureDisabled: options.captureSource ? undefined : true,
+    },
+    integrity: run.results.map((testCase, index) => integrityOf(testCase, located[index] ?? {})),
   };
 }

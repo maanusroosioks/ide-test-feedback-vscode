@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { AuthService } from '../../../src/auth/authService';
 import { registerConfigureAssignmentCommand } from '../../../src/commands/configureAssignment';
-import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/submissionMetadata';
-import { pathExists } from '../../../src/util/shell';
+import { WORKSPACE_CONFIG_FILE_NAME } from '../../../src/core/workspaceConfig';
+import { pathExists } from '../../../src/util/fs';
 import { tempDir } from '../helpers/fs';
 import {
   ConfigurationTarget,

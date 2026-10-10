@@ -6,7 +6,8 @@ import { dotnetTestAdapter } from '../../../src/ecosystems/dotnet/dotnet-test';
 import { gradleJunitAdapter } from '../../../src/ecosystems/jvm/gradle-junit';
 import { mavenJunitAdapter } from '../../../src/ecosystems/jvm/maven-junit';
 import { pytestAdapter } from '../../../src/ecosystems/python/pytest';
-import { commandExists, pathExists, runCommand, type RunCommandOptions } from '../../../src/util/shell';
+import { pathExists } from '../../../src/util/fs';
+import { commandExists, runCommand, type RunCommandOptions } from '../../../src/util/shell';
 import { recordingLogger } from '../helpers/fakes';
 import { tempDir, writeTree } from '../helpers/fs';
 import { readFixture } from '../helpers/project';
@@ -238,14 +239,16 @@ describe('pytestAdapter', () => {
     },
   );
 
-  it('runs pytest as a module and asks for a JUnit XML report in the temp directory', async () => {
+  it('runs pytest as a module and asks for a JUnit XML report in a fresh directory under the temp directory', async () => {
     simulateTool();
 
     await pytestAdapter.run(folder, {});
 
     const { command } = lastCommand();
     expect(command).toMatch(new RegExp(`^${python} -m pytest --junit-xml="`));
-    expect(dirname(reportPathOf(command))).toBe(resolve(tmpdir()));
+    const reportDir = dirname(reportPathOf(command));
+    expect(dirname(reportDir)).toBe(resolve(tmpdir()));
+    expect(await pathExists(reportDir)).toBe(true);
   });
 
   it('appends the report flag to a command override', async () => {
@@ -281,7 +284,7 @@ describe('pytestAdapter', () => {
     expect(await pathExists(reportPath)).toBe(true);
 
     await result.cleanup();
-    expect(await pathExists(reportPath)).toBe(false);
+    expect(await pathExists(dirname(reportPath))).toBe(false);
   });
 
   it('explains a missing report rather than reporting zero tests', async () => {
@@ -385,6 +388,22 @@ describe('dotnetTestAdapter', () => {
     expect(await dotnetTestAdapter.detect(folder)).toBe(false);
   });
 
+  it.each(['Calc.Tests', 'Calc_Test', 'Calc-tests', 'CalcTests', 'Calc2Test', 'Tests'])(
+    'takes %s.csproj one folder down for a test project',
+    async (name) => {
+      await writeTree(folder, { [`${name}/${name}.csproj`]: '' });
+      expect(await dotnetTestAdapter.detect(folder)).toBe(true);
+    },
+  );
+
+  it.each(['Latest', 'Contest', 'Attest', 'Contests'])(
+    'does not take %s.csproj for a test project just for ending in "test"',
+    async (name) => {
+      await writeTree(folder, { [`${name}/${name}.csproj`]: '' });
+      expect(await dotnetTestAdapter.detect(folder)).toBe(false);
+    },
+  );
+
   it('leaves a lone project to dotnet test', async () => {
     await writeTree(folder, { 'Calc.Tests.csproj': '' });
     simulateTool();
@@ -430,7 +449,7 @@ describe('dotnetTestAdapter', () => {
     const result = await dotnetTestAdapter.run(folder, {});
 
     expect(result.run.results).toEqual([]);
-    expect(result.reportError).toContain('no report was written');
+    expect(result.reportError).toContain('no TRX report was written');
   });
 
   it('explains a results directory with no TRX in it', async () => {

@@ -1,5 +1,6 @@
-import type { NormalizedTestRun } from './types';
+import { UNNAMED_TEST, type NormalizedTestCase, type NormalizedTestRun } from './types';
 import type { SubmissionMetadata } from './submissionMetadata';
+import { redactLocalPaths, type LocalRoots } from './redactPaths';
 import type { TestEvidencePayload, TestSource, TestSourceFile } from '../capture/evidence';
 import {
   assignmentKeyProblem,
@@ -57,11 +58,36 @@ function timingFields(run: NormalizedTestRun): Pick<TestRunRequest, 'startedAtMs
   return { startedAtMs: startedAt, finishedAtMs: finishedAt };
 }
 
-function validateAssignmentKey(assignmentKey: string): void {
-  const problem = assignmentKeyProblem(assignmentKey);
+/** Catches what the gateway would reject the whole run for, with a message the student can act on. */
+function assertSubmittable(run: NormalizedTestRun, metadata: SubmissionMetadata): void {
+  if (run.results.length === 0) {
+    throw new InvalidPayloadError('Test run produced no results — nothing to submit.');
+  }
+  if (run.results.length > REQUEST_LIMITS.results) {
+    throw new InvalidPayloadError(
+      `Test run produced ${run.results.length} results; at most ${REQUEST_LIMITS.results} can be submitted.`,
+    );
+  }
+  const problem = assignmentKeyProblem(metadata.assignmentKey);
   if (problem) {
     throw new InvalidPayloadError(problem);
   }
+}
+
+function toResultRequest(
+  testCase: NormalizedTestCase,
+  source: TestSource | undefined,
+  localRoots: LocalRoots | undefined,
+): TestResultRequest {
+  return {
+    testSuite: textField(testCase.testSuite, REQUEST_LIMITS.testSuite)?.trim() || undefined,
+    // Sanitizing can empty a name, e.g. `<>`.
+    testName: textField(testCase.testName, REQUEST_LIMITS.testName).trim() || UNNAMED_TEST,
+    status: testCase.status,
+    durationMs: durationField(testCase.durationMs),
+    message: textField(redactLocalPaths(testCase.message, localRoots), MAX_MESSAGE_CHARS),
+    source: source ? toSourceRequest(source) : undefined,
+  };
 }
 
 function toSourceRequest(source: TestSource): TestSourceRequest | undefined {
@@ -84,32 +110,13 @@ export function buildTestRunRequest(
   run: NormalizedTestRun,
   metadata: SubmissionMetadata,
   evidence?: TestEvidencePayload,
+  localRoots?: LocalRoots,
 ): TestRunRequest {
-  if (run.results.length === 0) {
-    throw new InvalidPayloadError('Test run produced no results — nothing to submit.');
-  }
-  if (run.results.length > REQUEST_LIMITS.results) {
-    throw new InvalidPayloadError(
-      `Test run produced ${run.results.length} results; at most ${REQUEST_LIMITS.results} can be submitted.`,
-    );
-  }
-  validateAssignmentKey(metadata.assignmentKey);
+  assertSubmittable(run, metadata);
 
-  const results: TestResultRequest[] = run.results.map((testCase, index): TestResultRequest => {
-    if (!testCase.testName.trim()) {
-      throw new InvalidPayloadError('Encountered a test result with a blank testName.');
-    }
-    const source = evidence?.sources[index];
-    return {
-      testSuite: textField(testCase.testSuite, REQUEST_LIMITS.testSuite),
-      testName: textField(testCase.testName, REQUEST_LIMITS.testName),
-      status: testCase.status,
-      durationMs: durationField(testCase.durationMs),
-      message: textField(testCase.message, MAX_MESSAGE_CHARS),
-      source: source ? toSourceRequest(source) : undefined,
-    };
-  });
-
+  const results = run.results.map((testCase, index) =>
+    toResultRequest(testCase, evidence?.sources[index], localRoots),
+  );
   // Already capped at REQUEST_LIMITS.testFiles by the evidence collector.
   const testFiles = evidence?.files.map(toSourceFileRequest);
 

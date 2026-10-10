@@ -28,6 +28,10 @@
               {
                 "group": ["**/ui/*", "../ui/**", "./ui/**"],
                 "message": "Pure layers must not import from ui/. Move the shared type into core/ports.ts."
+              },
+              {
+                "group": ["**/config/*", "../config/**", "./config/**"],
+                "message": "config/ reads settings through vscode. Take the value as a parameter and let ui/ read it."
               }
             ]
           }

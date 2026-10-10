@@ -1,5 +1,5 @@
 import { defineAdapter } from '../../runner/define';
-import { anyExists } from '../../util/shell';
+import { anyExists } from '../../util/fs';
 import { junitReportDirs } from '../../runner/reports';
 import { wrapperInvocation } from './wrapper';
 

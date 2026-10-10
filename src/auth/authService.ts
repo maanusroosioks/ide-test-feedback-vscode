@@ -22,12 +22,6 @@ export class AuthService {
     return this.interactiveSession({ createIfNone: true });
   }
 
-  async logout(): Promise<void> {
-    await vscode.window.showInformationMessage(
-      'To sign out, open the Accounts menu (bottom-left of VS Code) and remove the Microsoft account used for Moodle Submit.',
-    );
-  }
-
   async isSignedIn(): Promise<boolean> {
     const session = await vscode.authentication.getSession(PROVIDER_ID, this.getScopes(), { silent: true });
     return session !== undefined;

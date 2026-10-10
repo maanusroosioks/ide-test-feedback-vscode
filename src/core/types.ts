@@ -1,3 +1,6 @@
+/** For a result without a name: a blank one would make the gateway reject the whole run over one test. */
+export const UNNAMED_TEST = '(unnamed test)';
+
 export type TestStatus = 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR';
 
 /** What an adapter's tests run on; one platform can host several source languages. */

@@ -1,7 +1,7 @@
-import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { defineAdapter } from '../../runner/define';
-import { anyExists, commandExists, pathExists } from '../../util/shell';
+import { anyExists, pathExists, readDirSafe } from '../../util/fs';
+import { commandExists } from '../../util/shell';
 import { parseJUnitXmlFile } from '../../runner/parsers/junit-xml-parser';
 import { tempFileReport } from '../../runner/reports';
 import { PYTEST_FILE } from './languages';
@@ -16,8 +16,8 @@ const VENV_DIRS = ['.venv', 'venv', 'env'];
 
 async function hasTestFiles(folderPath: string): Promise<boolean> {
   for (const dir of TEST_FILE_DIRS) {
-    const names = await readdir(join(folderPath, dir)).catch((): string[] => []);
-    if (names.some((name) => PYTEST_FILE.test(name))) return true;
+    const entries = await readDirSafe(join(folderPath, dir));
+    if (entries.some((entry) => PYTEST_FILE.test(entry.name))) return true;
   }
   return false;
 }

@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MissingAssignmentKeyError } from '../../../src/core/submissionMetadata';
 import { submitRun } from '../../../src/core/submitRun';
@@ -40,6 +41,23 @@ describe('submitRun', () => {
       projectName: 'my-project',
       results: [{ testName: 'test_adds', status: 'PASSED' }],
     });
+  });
+
+  it('keeps the absolute project path out of failure messages', async () => {
+    await writeWorkspaceConfig(folderPath, { assignmentKey: 'assignment-101' });
+    const failing = testRun([
+      { testName: 'reads', status: 'FAILED', message: `FileNotFoundException: ${join(folderPath, 'data', 'in.txt')}` },
+    ]);
+    const apiClient = {
+      async submitResults(payload: TestRunRequest) {
+        sent.push(payload);
+        return { status: 202, body: {} };
+      },
+    } as unknown as MoodleApiClient;
+
+    await submitRun(failing, { folderPath, projectName: 'p' }, { apiClient, logger: recordingLogger() });
+
+    expect(sent[0].results[0].message).toBe(`FileNotFoundException: ${join('data', 'in.txt')}`);
   });
 
   it("uses the file's project name over the folder name", async () => {

@@ -4,9 +4,8 @@ import { ALL_ADAPTERS } from './ecosystems';
 import { AuthService } from './auth/authService';
 import { MoodleApiClient } from './services/moodleApiClient';
 import { getAuthScopes, getRequestTimeoutMs, getServiceUrl } from './config/settings';
-import { registerRunCommand } from './commands/run';
-import { registerLoginCommand } from './commands/login';
-import { registerLogoutCommand } from './commands/logout';
+import { registerRunCommands } from './commands/run';
+import { registerAccountCommands } from './commands/account';
 import { registerConfigureAssignmentCommand } from './commands/configureAssignment';
 import { registerShowOutputCommand } from './commands/showOutput';
 import { createOutputChannelLogger, getOutputChannel } from './ui/outputChannel';
@@ -16,10 +15,7 @@ import { maybePromptOnboarding, refreshConfiguredContext } from './ui/onboarding
 import { killRunningCommands } from './util/shell';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const registry = new AdapterRegistry();
-  for (const adapter of ALL_ADAPTERS) {
-    registry.register(adapter);
-  }
+  const registry = new AdapterRegistry(ALL_ADAPTERS);
 
   const authService = new AuthService(getAuthScopes);
   const apiClient = new MoodleApiClient({
@@ -40,10 +36,8 @@ export function activate(context: vscode.ExtensionContext): void {
     status,
   });
 
-  registerRunCommand(context, 'moodleSubmit.runAndSubmit', true, testControl, logger, status);
-  registerRunCommand(context, 'moodleSubmit.runTestsOnly', false, testControl, logger, status);
-  registerLoginCommand(context, authService);
-  registerLogoutCommand(context, authService);
+  registerRunCommands(context, { control: testControl, logger, status });
+  registerAccountCommands(context, authService);
   registerConfigureAssignmentCommand(context, authService);
   registerShowOutputCommand(context);
 

@@ -51,6 +51,20 @@ describe('settings getters', () => {
   });
 });
 
+describe('getTestCommandOverrides', () => {
+  it('drops blank and non-string commands, which would leave only the report flags to run', () => {
+    configValues.set('testCommandOverrides', { pytest: '  ', 'maven-junit': 42, 'gradle-junit': ' gradle test ' });
+
+    expect(getTestCommandOverrides()).toEqual({ 'gradle-junit': 'gradle test' });
+  });
+
+  it('ignores a value that is not an object', () => {
+    configValues.set('testCommandOverrides', 'mvn test');
+
+    expect(getTestCommandOverrides()).toEqual({});
+  });
+});
+
 describe('folder-scoped settings', () => {
   it.each([
     ['getPreferredAdapterId', () => getPreferredAdapterId('/work/api')],

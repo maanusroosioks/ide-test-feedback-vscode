@@ -12,7 +12,7 @@ import {
   suiteKey,
   suiteLabel,
   testItemId,
-} from '../../../src/ui/testTree';
+} from '../../../src/ui/testItemIds';
 
 describe('discovered item ids', () => {
   const file = fileItemId('/work/proj', 'tests/test_math.py');
@@ -39,7 +39,7 @@ describe('discovered item ids', () => {
   });
 });
 
-describe('testTree ids', () => {
+describe('suite item ids', () => {
   it('namespaces suites and tests under their folder', () => {
     expect(folderItemId('/work/proj')).toBe('/work/proj');
     expect(suiteItemId('/work/proj', 'com.pkg.FooTest')).toBe('/work/proj::com.pkg.FooTest');

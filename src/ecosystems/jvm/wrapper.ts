@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { pathExists } from '../../util/shell';
+import { pathExists } from '../../util/fs';
 
 export interface WrapperScripts {
   windows: string;

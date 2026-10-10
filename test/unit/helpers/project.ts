@@ -13,6 +13,7 @@ export function readFixture(relative: string): string {
 }
 
 interface PackageJson {
+  activationEvents: string[];
   contributes: {
     commands: Array<{ command: string }>;
     configuration: Array<{ properties: Record<string, { enum?: string[] }> }>;

@@ -1,11 +1,11 @@
 import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
-import { join, sep } from 'node:path';
-import { XMLParser } from 'fast-xml-parser';
-import type { NormalizedTestCase, TestStatus } from '../../core/types';
+import { join, relative, sep } from 'node:path';
+import { UNNAMED_TEST, type NormalizedTestCase } from '../../core/types';
 import { describeError } from '../../core/errors';
-import { removeDir } from '../../util/shell';
-import { parseReportFile, UNNAMED_TEST } from './report-file';
+import { removeDir } from '../../util/fs';
+import { isWalkableDir } from '../../util/paths';
+import { createReportParser, parseReportFile } from './report-file';
 
 interface JUnitFailureXml {
   '@_message'?: string;
@@ -27,14 +27,7 @@ interface JUnitTestSuiteXml {
   testsuite?: JUnitTestSuiteXml[];
 }
 
-const parser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  textNodeName: '#text',
-  // Otherwise a failure body that happens to be numeric arrives as a number.
-  parseTagValue: false,
-  isArray: (name) => name === 'testsuite' || name === 'testcase',
-});
+const parser = createReportParser(['testsuite', 'testcase']);
 
 function toMillis(seconds?: string): number | undefined {
   if (seconds === undefined) return undefined;
@@ -57,30 +50,21 @@ function extractFailure(node: JUnitFailureXml | JUnitFailureXml[] | string | und
   return { message: failure['@_message'], stackTrace: failure['#text'] };
 }
 
+function outcomeOf(testcase: JUnitTestCaseXml): Pick<NormalizedTestCase, 'status' | 'message' | 'stackTrace'> {
+  if (testcase.failure !== undefined) return { status: 'FAILED', ...extractFailure(testcase.failure) };
+  if (testcase.error !== undefined) return { status: 'ERROR', ...extractFailure(testcase.error) };
+  if (testcase.skipped !== undefined) return { status: 'SKIPPED' };
+  return { status: 'PASSED' };
+}
+
 function collectSuite(suite: JUnitTestSuiteXml, into: NormalizedTestCase[]): void {
   for (const testcase of suite.testcase ?? []) {
-    let status: TestStatus = 'PASSED';
-    let message: string | undefined;
-    let stackTrace: string | undefined;
-
-    if (testcase.failure !== undefined) {
-      status = 'FAILED';
-      ({ message, stackTrace } = extractFailure(testcase.failure));
-    } else if (testcase.error !== undefined) {
-      status = 'ERROR';
-      ({ message, stackTrace } = extractFailure(testcase.error));
-    } else if (testcase.skipped !== undefined) {
-      status = 'SKIPPED';
-    }
-
     into.push({
       // pytest names every suite "pytest"; only the case carries the owning module.
       testSuite: testcase['@_classname'] ?? suite['@_name'],
       testName: testcase['@_name'] || UNNAMED_TEST,
-      status,
       durationMs: toMillis(testcase['@_time']),
-      message,
-      stackTrace,
+      ...outcomeOf(testcase),
     });
   }
 
@@ -109,13 +93,8 @@ export function parseJUnitXmlFile(path: string): Promise<NormalizedTestCase[]> {
   return parseReportFile(path, parseJUnitXml);
 }
 
-/** Large or irrelevant trees that never contain report directories. */
+/** Large or irrelevant trees that never contain report directories. Hidden ones are skipped too. */
 const PRUNE_DIRS = new Set([
-  '.git',
-  '.hg',
-  '.svn',
-  '.idea',
-  '.vscode',
   'node_modules',
   'src',
   'bin',
@@ -147,16 +126,16 @@ function segmentsOf(reportDir: string | undefined): string[] {
   return reportDir === undefined ? [] : reportDir.split(/[\\/]/).filter(Boolean);
 }
 
-function endsWithSegments(dir: string, suffix: string[]): boolean {
+function endsWithSegments(root: string, dir: string, suffix: string[]): boolean {
   if (suffix.length === 0) return true;
-  const segments = dir.split(sep).filter(Boolean);
+  const segments = relative(root, dir).split(sep).filter(Boolean);
   const offset = segments.length - suffix.length;
   return offset >= 0 && suffix.every((want, i) => segments[offset + i] === want);
 }
 
 function isWalkable(entry: Dirent): boolean {
   // `isDirectory()` is false for symlinks, so the walk cannot loop.
-  return entry.isDirectory() && !entry.name.startsWith('.') && !PRUNE_DIRS.has(entry.name);
+  return entry.isDirectory() && isWalkableDir(entry.name, PRUNE_DIRS);
 }
 
 /** Every readable directory at or under `root`, in a stable order. */
@@ -181,7 +160,7 @@ async function scanTree(root: string, into: ScannedDir[]): Promise<void> {
 async function findReportDirs(root: string, suffix: string[]): Promise<ScannedDir[]> {
   const scanned: ScannedDir[] = [];
   await scanTree(root, scanned);
-  return scanned.filter(({ dir }) => endsWithSegments(dir, suffix));
+  return scanned.filter(({ dir }) => endsWithSegments(root, dir, suffix));
 }
 
 /**

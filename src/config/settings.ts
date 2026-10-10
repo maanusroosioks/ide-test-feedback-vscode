@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { CaptureOptions } from '../capture/evidence';
 
 function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('moodleSubmit');
@@ -34,23 +35,25 @@ export function getAuthScopes(): string[] {
   return config().get<string[]>('authScopes', ['User.Read']);
 }
 
+/** Blank or non-string entries are dropped: the report flags appended to `""` would be the whole command. */
 export function getTestCommandOverrides(folderPath?: string): Record<string, string> {
-  return folderConfig(folderPath).get<Record<string, string>>('testCommandOverrides', {});
+  const raw: unknown = folderConfig(folderPath).get('testCommandOverrides', {});
+  if (typeof raw !== 'object' || raw === null) return {};
+  return Object.fromEntries(
+    Object.entries(raw)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== '')
+      .map(([adapterId, command]) => [adapterId, command.trim()]),
+  );
 }
 
 export function getPreferredAdapterId(folderPath?: string): string | undefined {
   return folderConfig(folderPath).get<string>('preferredAdapter');
 }
 
-export interface SourceCaptureSettings {
-  captureSource: boolean;
-  maxTotalChars: number;
-}
-
 // Hard ceiling so a student can't set a huge value and use submissions to hammer the gateway.
 const MAX_TOTAL_CHARS_CEILING = 1_000_000;
 
-export function getSourceCaptureSettings(folderPath?: string): SourceCaptureSettings {
+export function getSourceCaptureSettings(folderPath?: string): CaptureOptions {
   const settings = folderConfig(folderPath);
   return {
     captureSource: settings.get<boolean>('submitTestSource', true),

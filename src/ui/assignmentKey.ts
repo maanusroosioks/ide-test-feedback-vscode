@@ -4,7 +4,7 @@ import {
   readWorkspaceConfigFile,
   WORKSPACE_CONFIG_FILE_NAME,
   writeWorkspaceAssignmentKey,
-} from '../core/submissionMetadata';
+} from '../core/workspaceConfig';
 import { assignmentKeyProblem } from '../services/httpTypes';
 
 /**
@@ -39,15 +39,24 @@ export async function promptAndSaveAssignmentKey(folder: vscode.WorkspaceFolder)
 /** Catches a missing or invalid key before the tests run, not after. `false` means abort quietly, no error. */
 export async function ensureAssignmentKey(folder: vscode.WorkspaceFolder): Promise<boolean> {
   const key = (await readWorkspaceConfigFile(folder.uri.fsPath))?.assignmentKey;
-  const problem = key === undefined ? undefined : assignmentKeyProblem(key);
-  if (key !== undefined && !problem) return true;
+  if (key === undefined) {
+    return offerToSetKey(
+      folder,
+      `"${folder.name}" has no assignment key. Add one to its ${WORKSPACE_CONFIG_FILE_NAME}?`,
+      'Add key',
+    );
+  }
 
-  const action = key === undefined ? 'Add key' : 'Fix key';
-  const pick = await vscode.window.showWarningMessage(
-    key === undefined
-      ? `"${folder.name}" has no assignment key. Add one to its ${WORKSPACE_CONFIG_FILE_NAME}?`
-      : `The assignment key in "${folder.name}"'s ${WORKSPACE_CONFIG_FILE_NAME} can't be used: ${problem}`,
-    action,
+  const problem = assignmentKeyProblem(key);
+  if (!problem) return true;
+  return offerToSetKey(
+    folder,
+    `The assignment key in "${folder.name}"'s ${WORKSPACE_CONFIG_FILE_NAME} can't be used: ${problem}`,
+    'Fix key',
   );
+}
+
+async function offerToSetKey(folder: vscode.WorkspaceFolder, message: string, action: string): Promise<boolean> {
+  const pick = await vscode.window.showWarningMessage(message, action);
   return pick === action && (await promptAndSaveAssignmentKey(folder));
 }
