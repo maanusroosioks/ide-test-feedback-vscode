@@ -177,14 +177,16 @@ Restricted Mode. Trust the folder to use it.
 
 | Adapter | Detected by | Default command |
 | --- | --- | --- |
-| Maven (JUnit) | `pom.xml` | `mvn -B test` |
-| Gradle (JUnit) | `build.gradle` / `build.gradle.kts` | `gradlew cleanTest test` (or `gradle …`) |
-| pytest | `pytest.ini`, `pyproject.toml`, `setup.cfg`, `conftest.py` | `pytest --junit-xml=…` |
-| .NET | `*.csproj` / `*.sln` | `dotnet test --logger trx …` |
+| Maven (JUnit) | `pom.xml` | `mvnw -B test -Dmaven.test.failure.ignore=true` (or `mvn …`) |
+| Gradle (JUnit) | `build.gradle(.kts)` / `settings.gradle(.kts)` | `gradlew cleanTest test --continue` (or `gradle …`) |
+| pytest | `pytest.ini`, `pyproject.toml`, `setup.cfg`, `conftest.py`, or `test_*.py` / `*_test.py` files | `python -m pytest --junit-xml=…` |
+| .NET | `*.csproj` / `*.sln` / `*.slnx`, or a `*Tests.csproj` one folder down | `dotnet test --logger trx …` |
 
-The test tool (`mvn`, `gradle`, `pytest`, `dotnet`) must be on your `PATH`. A run
-that produces zero results is reported as an error, since it almost always means the
-command itself failed to start.
+The project's own Maven or Gradle wrapper is used when it has one; otherwise `mvn` or
+`gradle` must be on your `PATH`. pytest runs with the Python in the project's `.venv`,
+`venv` or `env` folder if there is one, and otherwise with `python3` (`py -3` or `python`
+on Windows). `dotnet` must be on your `PATH`. A run that produces zero results is
+reported as an error, since it almost always means the command itself failed to start.
 
 ## Development
 

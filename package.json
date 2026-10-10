@@ -70,6 +70,7 @@
       "testing/item/context": [
         {
           "command": "moodleSubmit.runAndSubmit",
+          "when": "controllerId == moodleSubmit.tests",
           "group": "moodleSubmit@1"
         }
       ]
