@@ -64,7 +64,6 @@ vi.mock('../../../src/capture/sourceFiles', async (importOriginal) => {
   return { ...actual, locateResults: vi.fn(actual.locateResults) };
 });
 
-const KNOWN_TESTS_KEY = 'moodleSubmit.knownTests';
 const SUITE = 'tests.test_math';
 
 const TEST_FILE = `def test_add():
@@ -178,7 +177,7 @@ describe('registerTestController — tree', () => {
   it('registers one default Run profile on a disposable controller', () => {
     const { controller } = setup();
 
-    expect(tests.createTestController).toHaveBeenCalledWith('moodleSubmit.tests', 'Moodle Tests');
+    expect(tests.createTestController).toHaveBeenCalledWith('ideTestFeedback.tests', 'IDE Test Feedback');
     expect(context.subscriptions).toContain(controller);
     expect(controller.profiles).toEqual([
       expect.objectContaining({ label: 'Run Tests', kind: TestRunProfileKind.Run, isDefault: true }),
@@ -263,13 +262,6 @@ describe('registerTestController — tree', () => {
     expect(folderNode(controller).children.size).toBe(0);
   });
 
-  it('clears the test list that versions before discovery remembered', async () => {
-    await context.workspaceState.update(KNOWN_TESTS_KEY, { [folderPath]: [{ suite: SUITE, name: 'test_add' }] });
-
-    setup();
-
-    expect(context.workspaceState.get(KNOWN_TESTS_KEY)).toBeUndefined();
-  });
 
   it('follows workspace folders being added and removed', async () => {
     const { controller } = setup();
@@ -790,7 +782,7 @@ describe('performRun — submitting', () => {
     await performRun(control, { submit: true });
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
-      '"calculator" has no assignment key. Add one to its .moodle-submit.json?',
+      '"calculator" has no assignment key. Add one to its .ide-test-feedback.json?',
       'Add key',
     );
     expect(controller.runs).toHaveLength(0);
@@ -804,7 +796,7 @@ describe('performRun — submitting', () => {
     await performRun(control, { submit: true });
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
-      `The assignment key in "calculator"'s .moodle-submit.json can't be used: The assignment key may only contain letters, digits, '_' and '-'.`,
+      `The assignment key in "calculator"'s .ide-test-feedback.json can't be used: The assignment key may only contain letters, digits, '_' and '-'.`,
       'Fix key',
     );
     expect(controller.runs).toHaveLength(0);

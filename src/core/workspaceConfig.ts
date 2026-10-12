@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MoodleSubmitError } from './errors';
 
-export const WORKSPACE_CONFIG_FILE_NAME = '.moodle-submit.json';
+export const WORKSPACE_CONFIG_FILE_NAME = '.ide-test-feedback.json';
 
 export class InvalidWorkspaceConfigError extends MoodleSubmitError {
   constructor(reason: string) {

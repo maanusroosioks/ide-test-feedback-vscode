@@ -54,7 +54,7 @@ describe('handleCommandError', () => {
 
     await settle();
 
-    expect(commands.executeCommand).toHaveBeenCalledWith('moodleSubmit.showOutput');
+    expect(commands.executeCommand).toHaveBeenCalledWith('ideTestFeedback.showOutput');
   });
 
   it('does nothing more when the popup is dismissed', async () => {

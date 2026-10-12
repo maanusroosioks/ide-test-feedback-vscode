@@ -54,7 +54,7 @@ export async function runTests(
   // A forced adapter bypasses detection, so flag one that doesn't fit the folder.
   if (preferredAdapterId && !(await adapter.detect(folderPath))) {
     logger.log(
-      `Warning: moodleSubmit.preferredAdapter forces ${adapter.displayName}, but this folder has none of ` +
+      `Warning: ideTestFeedback.preferredAdapter forces ${adapter.displayName}, but this folder has none of ` +
         'its marker files. Clear that setting to go back to auto-detection.',
     );
   } else {

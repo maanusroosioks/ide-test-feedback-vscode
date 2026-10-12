@@ -13,7 +13,7 @@ export function createStatusReporter(): DisposableStatusReporter {
     item.tooltip = tooltip;
     item.backgroundColor = isError ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
   };
-  const idle = (): void => show('$(beaker) Moodle Submit');
+  const idle = (): void => show('$(beaker) IDE Test Feedback');
 
   idle();
   item.show();
@@ -30,7 +30,7 @@ export function createStatusReporter(): DisposableStatusReporter {
       }
     },
     error(message: string): void {
-      show('$(error) Moodle submit failed', { tooltip: message, isError: true });
+      show('$(error) IDE Test Feedback', { tooltip: message, isError: true });
     },
     idle,
     dispose(): void {

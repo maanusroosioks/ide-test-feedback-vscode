@@ -6,9 +6,6 @@ import { TestItemTree } from './testItemTree';
 import { registerTestDiscovery } from './testDiscovery';
 import { runFolder, type PerformRunOptions, type RunDeps } from './runFolder';
 
-/** Where versions before discovery remembered the last run's tests. Cleared, since the tree now comes from source. */
-const KNOWN_TESTS_KEY = 'moodleSubmit.knownTests';
-
 export interface MoodleTestControl {
   performRun(options: PerformRunOptions): Promise<void>;
   folderFor(target: unknown): vscode.WorkspaceFolder | undefined;
@@ -23,12 +20,8 @@ function asTestItem(target: unknown): vscode.TestItem | undefined {
 }
 
 export function registerTestController(context: vscode.ExtensionContext, deps: RunDeps): MoodleTestControl {
-  const controller = vscode.tests.createTestController('moodleSubmit.tests', 'Moodle Tests');
+  const controller = vscode.tests.createTestController('ideTestFeedback.tests', 'IDE Test Feedback');
   context.subscriptions.push(controller);
-
-  if (context.workspaceState.get(KNOWN_TESTS_KEY) !== undefined) {
-    void context.workspaceState.update(KNOWN_TESTS_KEY, undefined);
-  }
 
   const tree = new TestItemTree(controller);
   registerTestDiscovery(context, controller, tree, deps);

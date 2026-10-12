@@ -4,18 +4,18 @@ import { ProgressLocation, progress, window } from '../helpers/vscodeStub';
 
 describe('withProgress', () => {
   it('shows a cancellable notification and returns the task result', async () => {
-    const result = await withProgress('Moodle Submit', async () => 42);
+    const result = await withProgress('IDE Test Feedback', async () => 42);
 
     expect(result).toBe(42);
     expect(window.withProgress.mock.calls[0][0]).toEqual({
       location: ProgressLocation.Notification,
-      title: 'Moodle Submit',
+      title: 'IDE Test Feedback',
       cancellable: true,
     });
   });
 
   it('forwards report messages to the notification', async () => {
-    await withProgress('Moodle Submit', async (handle) => {
+    await withProgress('IDE Test Feedback', async (handle) => {
       handle.report('Running tests…');
     });
 
@@ -25,7 +25,7 @@ describe('withProgress', () => {
   it('aborts the signal when the user cancels the notification', async () => {
     let signal: AbortSignal | undefined;
 
-    await withProgress('Moodle Submit', async (handle) => {
+    await withProgress('IDE Test Feedback', async (handle) => {
       signal = handle.signal;
       expect(signal.aborted).toBe(false);
       progress.cancel();
@@ -38,7 +38,7 @@ describe('withProgress', () => {
     let signal: AbortSignal | undefined;
 
     await expect(
-      withProgress('Moodle Submit', async (handle) => {
+      withProgress('IDE Test Feedback', async (handle) => {
         signal = handle.signal;
         throw new Error('task failed');
       }),

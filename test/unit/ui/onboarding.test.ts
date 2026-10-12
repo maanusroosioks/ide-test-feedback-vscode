@@ -15,7 +15,7 @@ import {
   type FakeExtensionContext,
 } from '../helpers/vscodeStub';
 
-const DISMISSED_KEY = 'moodleSubmit.onboardingDismissed';
+const DISMISSED_KEY = 'ideTestFeedback.onboardingDismissed';
 const WALKTHROUGH = ['workbench.action.openWalkthrough', 'example.moodle-test-submit#setup', false];
 
 let context: FakeExtensionContext;
@@ -41,8 +41,8 @@ describe('refreshConfiguredContext', () => {
     refreshConfiguredContext();
 
     expect(commands.executeCommand.mock.calls).toEqual([
-      ['setContext', 'moodleSubmit.configured', false],
-      ['setContext', 'moodleSubmit.configured', true],
+      ['setContext', 'ideTestFeedback.configured', false],
+      ['setContext', 'ideTestFeedback.configured', true],
     ]);
   });
 });
@@ -112,7 +112,7 @@ describe('ensureConfigured', () => {
     });
 
     expect(await ensureConfigured(asContext(context))).toBe(true);
-    expect(commands.executeCommand).toHaveBeenCalledWith('moodleSubmit.configureAssignment');
+    expect(commands.executeCommand).toHaveBeenCalledWith('ideTestFeedback.configureAssignment');
   });
 
   it('stops when configuration was abandoned', async () => {

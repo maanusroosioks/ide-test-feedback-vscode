@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext): void {
   refreshConfiguredContext();
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('moodleSubmit.serviceUrl')) {
+      if (event.affectsConfiguration('ideTestFeedback.serviceUrl')) {
         refreshConfiguredContext();
       }
     }),

@@ -19,8 +19,8 @@ import {
   workspaceFolder,
 } from '../helpers/vscodeStub';
 
-const COMMAND = 'moodleSubmit.configureAssignment';
-const ALL_SAVED = 'Moodle Submit configuration saved.';
+const COMMAND = 'ideTestFeedback.configureAssignment';
+const ALL_SAVED = 'IDE Test Feedback configuration saved.';
 const URL_ONLY_SAVED = `Service URL saved. Add an assignment key to the project's ${WORKSPACE_CONFIG_FILE_NAME} before submitting.`;
 
 type Validator = (value: string) => string | undefined;
@@ -80,16 +80,16 @@ describe('configureAssignment command', () => {
 
   it.each([
     ['  ', 'The service URL is required.'],
-    ['moodle-bridge', 'Enter a full URL, e.g. https://moodle-bridge.example.edu'],
-    ['ftp://moodle-bridge.example.edu', 'The URL must start with https://'],
+    ['ide-feedback-gateway', 'Enter a full URL, e.g. https://ide-feedback-gateway.example.edu'],
+    ['ftp://ide-feedback-gateway.example.edu', 'The URL must start with https://'],
     // Plain HTTP only to a local service, since the sign-in token is sent along.
-    ['http://moodle-bridge.example.edu', 'The URL must use https:// (http:// is only allowed for localhost).'],
+    ['http://ide-feedback-gateway.example.edu', 'The URL must use https:// (http:// is only allowed for localhost).'],
     // A query, fragment or credentials would break the submission URL.
     ['https://bridge.example.edu/base?course=7', NO_QUERY],
     ['https://bridge.example.edu/?', NO_QUERY],
     ['https://bridge.example.edu/#top', NO_QUERY],
     ['https://me:secret@bridge.example.edu', 'Leave the user name and password out of the URL.'],
-    ['https://moodle-bridge.example.edu', undefined],
+    ['https://ide-feedback-gateway.example.edu', undefined],
     ['https://bridge.example.edu/moodle/', undefined],
     ['  http://localhost:8080  ', undefined],
     ['http://127.0.0.1:8080', undefined],
@@ -146,7 +146,7 @@ describe('configureAssignment command', () => {
 
     await invokeCommand(COMMAND);
 
-    expect(commands.executeCommand).toHaveBeenCalledWith('moodleSubmit.login');
+    expect(commands.executeCommand).toHaveBeenCalledWith('ideTestFeedback.login');
   });
 
   it('does not sign in when the user picks Later', async () => {
@@ -156,7 +156,7 @@ describe('configureAssignment command', () => {
 
     await invokeCommand(COMMAND);
 
-    expect(commands.executeCommand).not.toHaveBeenCalledWith('moodleSubmit.login');
+    expect(commands.executeCommand).not.toHaveBeenCalledWith('ideTestFeedback.login');
   });
 
   it('skips the sign-in prompt when already signed in', async () => {
@@ -234,7 +234,7 @@ describe('configureAssignment command — assignment key', () => {
     await invokeCommand(COMMAND);
 
     expect(messagesShown(window.showWarningMessage)).toContain(
-      'Could not save the assignment key for "calculator": .moodle-submit.json could not be read: it is not valid JSON.',
+      'Could not save the assignment key for "calculator": .ide-test-feedback.json could not be read: it is not valid JSON.',
     );
     expect(await readFile(target, 'utf8')).toBe('{ not json');
     expect(messagesShown(window.showInformationMessage)).toContain(URL_ONLY_SAVED);

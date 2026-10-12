@@ -4,13 +4,13 @@ export class TimeoutError extends MoodleSubmitError {}
 
 export class MissingServiceUrlError extends MoodleSubmitError {
   constructor() {
-    super('No serviceUrl configured. Run "Moodle Submit: Configure Assignment" first.');
+    super('No serviceUrl configured. Run "IDE Test Feedback: Configure Assignment" first.');
   }
 }
 
 export class InvalidServiceUrlError extends MoodleSubmitError {
   constructor(problem: string) {
-    super(`The moodleSubmit.serviceUrl setting is not usable: ${problem}`);
+    super(`The ideTestFeedback.serviceUrl setting is not usable: ${problem}`);
   }
 }
 

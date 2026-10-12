@@ -5,7 +5,7 @@ let channel: vscode.OutputChannel | undefined;
 
 export function getOutputChannel(): vscode.OutputChannel {
   if (!channel) {
-    channel = vscode.window.createOutputChannel('Moodle Test Submit');
+    channel = vscode.window.createOutputChannel('IDE Test Feedback');
   }
   return channel;
 }

@@ -59,7 +59,7 @@ async function resolveDotnetCommand(folderPath: string): Promise<string> {
   if (nested.length > 1) {
     throw new MoodleSubmitError(
       `Found several test projects (${nested.join(', ')}) but no solution to run them together. ` +
-        'Add one with "dotnet new sln" and "dotnet sln add", or set moodleSubmit.testCommandOverrides.',
+        'Add one with "dotnet new sln" and "dotnet sln add", or set ideTestFeedback.testCommandOverrides.',
     );
   }
   // Nothing found at all only happens when preferredAdapter forces this adapter; dotnet explains.

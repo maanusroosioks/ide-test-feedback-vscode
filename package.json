@@ -1,6 +1,6 @@
 {
-  "name": "moodle-test-submit",
-  "displayName": "Moodle Test Submit",
+  "name": "ide-test-feedback-vscode",
+  "displayName": "IDE Test Feedback for Moodle",
   "description": "Run your unit tests and submit the results to Moodle",
   "version": "0.1.0",
   "publisher": "mroosioks",
@@ -16,7 +16,7 @@
     "Testing"
   ],
   "activationEvents": [
-    "workspaceContains:.moodle-submit.json",
+    "workspaceContains:.ide-test-feedback.json",
     "workspaceContains:pom.xml",
     "workspaceContains:build.gradle",
     "workspaceContains:build.gradle.kts",
@@ -47,50 +47,50 @@
   "contributes": {
     "commands": [
       {
-        "command": "moodleSubmit.runAndSubmit",
+        "command": "ideTestFeedback.runAndSubmit",
         "title": "Run Tests & Submit to Moodle",
-        "category": "Moodle Submit",
+        "category": "IDE Test Feedback",
         "icon": "$(cloud-upload)"
       },
       {
-        "command": "moodleSubmit.runTestsOnly",
+        "command": "ideTestFeedback.runTestsOnly",
         "title": "Run Tests (No Submit)",
-        "category": "Moodle Submit"
+        "category": "IDE Test Feedback"
       },
       {
-        "command": "moodleSubmit.login",
+        "command": "ideTestFeedback.login",
         "title": "Sign In with Microsoft",
-        "category": "Moodle Submit"
+        "category": "IDE Test Feedback"
       },
       {
-        "command": "moodleSubmit.logout",
+        "command": "ideTestFeedback.logout",
         "title": "Sign Out",
-        "category": "Moodle Submit"
+        "category": "IDE Test Feedback"
       },
       {
-        "command": "moodleSubmit.configureAssignment",
+        "command": "ideTestFeedback.configureAssignment",
         "title": "Configure Assignment",
-        "category": "Moodle Submit"
+        "category": "IDE Test Feedback"
       },
       {
-        "command": "moodleSubmit.showOutput",
+        "command": "ideTestFeedback.showOutput",
         "title": "Show Log",
-        "category": "Moodle Submit"
+        "category": "IDE Test Feedback"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "moodleSubmit.runAndSubmit",
+          "command": "ideTestFeedback.runAndSubmit",
           "when": "view == workbench.view.testing",
           "group": "navigation@100"
         }
       ],
       "testing/item/context": [
         {
-          "command": "moodleSubmit.runAndSubmit",
-          "when": "controllerId == moodleSubmit.tests",
-          "group": "moodleSubmit@1"
+          "command": "ideTestFeedback.runAndSubmit",
+          "when": "controllerId == ideTestFeedback.tests",
+          "group": "ideTestFeedback@1"
         }
       ]
     },
@@ -100,13 +100,13 @@
         "title": "Connection",
         "order": 1,
         "properties": {
-          "moodleSubmit.serviceUrl": {
+          "ideTestFeedback.serviceUrl": {
             "type": "string",
             "default": "",
-            "description": "Base URL of the submission service (e.g. https://moodle-bridge.example.edu). Can only be set in user settings, so a project cannot redirect where your sign-in token is sent.",
+            "description": "Base URL of the submission service (e.g. https://ide-feedback-gateway.example.edu). Can only be set in user settings, so a project cannot redirect where your sign-in token is sent.",
             "scope": "machine"
           },
-          "moodleSubmit.authScopes": {
+          "ideTestFeedback.authScopes": {
             "type": "array",
             "items": {
               "type": "string"
@@ -117,7 +117,7 @@
             "description": "OAuth scopes to request from the Microsoft authentication provider. Only change this if your course's submission service tells you to. Can only be set in user settings.",
             "scope": "machine"
           },
-          "moodleSubmit.requestTimeoutMs": {
+          "ideTestFeedback.requestTimeoutMs": {
             "type": "number",
             "default": 15000,
             "description": "Timeout in milliseconds for requests to the submission service.",
@@ -131,7 +131,7 @@
         "title": "Running Tests",
         "order": 2,
         "properties": {
-          "moodleSubmit.preferredAdapter": {
+          "ideTestFeedback.preferredAdapter": {
             "type": "string",
             "enum": [
               "maven-junit",
@@ -142,7 +142,7 @@
             "description": "Force a specific test adapter instead of relying on auto-detection.",
             "scope": "resource"
           },
-          "moodleSubmit.testCommandOverrides": {
+          "ideTestFeedback.testCommandOverrides": {
             "type": "object",
             "default": {},
             "description": "Per-adapter command overrides, e.g. { \"maven-junit\": \"mvn -Pci test\" }, for projects with nonstandard build setups. Give a single command with no shell operators (&&, |, ;): the reporting flags that let the extension read the results are appended to whatever you put here.",
@@ -155,13 +155,13 @@
         "title": "Source Capture",
         "order": 3,
         "properties": {
-          "moodleSubmit.submitTestSource": {
+          "ideTestFeedback.submitTestSource": {
             "type": "boolean",
             "default": true,
             "description": "Submit the source of each test that ran, so your instructor sees the code behind each result. Turning this off still submits the results and where each test was found.",
             "scope": "resource"
           },
-          "moodleSubmit.maxTotalSourceChars": {
+          "ideTestFeedback.maxTotalSourceChars": {
             "type": "number",
             "default": 500000,
             "description": "Largest amount of source captured across one submission. Once it's used up, the remaining files are submitted without their content.",
@@ -169,7 +169,7 @@
             "minimum": 1,
             "maximum": 1000000
           },
-          "moodleSubmit.warnOnSuspiciousTests": {
+          "ideTestFeedback.warnOnSuspiciousTests": {
             "type": "boolean",
             "default": true,
             "description": "Warn before submitting when tests look emptied or disabled. The warning never blocks a submission.",
@@ -181,41 +181,41 @@
     "walkthroughs": [
       {
         "id": "setup",
-        "title": "Set up Moodle Test Submit",
+        "title": "Set up IDE Test Feedback",
         "description": "Connect to your course's submission service and submit your first run.",
-        "when": "!moodleSubmit.configured",
+        "when": "!ideTestFeedback.configured",
         "steps": [
           {
             "id": "configure",
             "title": "Configure the submission service",
-            "description": "Tell the extension where your course's submission service lives.\n[Configure Assignment](command:moodleSubmit.configureAssignment)",
+            "description": "Tell the extension where your course's submission service lives.\n[Configure Assignment](command:ideTestFeedback.configureAssignment)",
             "media": {
               "markdown": "media/walkthrough/configure.md"
             },
             "completionEvents": [
-              "onContext:moodleSubmit.configured"
+              "onContext:ideTestFeedback.configured"
             ]
           },
           {
             "id": "signin",
             "title": "Sign in with Microsoft",
-            "description": "Authenticate so submissions are tied to your account.\n[Sign In with Microsoft](command:moodleSubmit.login)",
+            "description": "Authenticate so submissions are tied to your account.\n[Sign In with Microsoft](command:ideTestFeedback.login)",
             "media": {
               "markdown": "media/walkthrough/signin.md"
             },
             "completionEvents": [
-              "onCommand:moodleSubmit.login"
+              "onCommand:ideTestFeedback.login"
             ]
           },
           {
             "id": "firstRun",
             "title": "Run tests & submit",
-            "description": "Open a project with tests and submit your first run.\n[Run Tests & Submit](command:moodleSubmit.runAndSubmit)",
+            "description": "Open a project with tests and submit your first run.\n[Run Tests & Submit](command:ideTestFeedback.runAndSubmit)",
             "media": {
               "markdown": "media/walkthrough/run.md"
             },
             "completionEvents": [
-              "onCommand:moodleSubmit.runAndSubmit"
+              "onCommand:ideTestFeedback.runAndSubmit"
             ]
           }
         ]
@@ -223,8 +223,8 @@
     ],
     "jsonValidation": [
       {
-        "fileMatch": ".moodle-submit.json",
-        "url": "./schemas/moodle-submit.schema.json"
+        "fileMatch": ".ide-test-feedback.json",
+        "url": "./schemas/ide-test-feedback.schema.json"
       }
     ]
   },

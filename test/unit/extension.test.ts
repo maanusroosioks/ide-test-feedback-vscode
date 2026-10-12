@@ -57,10 +57,10 @@ describe('activate', () => {
     expect(contextKeyUpdates()).toEqual([false]);
 
     configValues.set('serviceUrl', 'https://bridge.example.edu');
-    configChanged('moodleSubmit.requestTimeoutMs');
+    configChanged('ideTestFeedback.requestTimeoutMs');
     expect(contextKeyUpdates()).toEqual([false]);
 
-    configChanged('moodleSubmit.serviceUrl');
+    configChanged('ideTestFeedback.serviceUrl');
     expect(contextKeyUpdates()).toEqual([false, true]);
   });
 
@@ -68,7 +68,7 @@ describe('activate', () => {
     activate(asContext(fakeExtensionContext()));
 
     expect(window.showInformationMessage).toHaveBeenCalledWith(
-      'Moodle Test Submit needs a one-time setup before you can submit results.',
+      'IDE Test Feedback needs a one-time setup before you can submit results.',
       'Start setup',
       "Don't ask again",
     );

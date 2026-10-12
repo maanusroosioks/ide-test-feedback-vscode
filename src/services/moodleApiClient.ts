@@ -27,7 +27,7 @@ export function serviceUrlProblem(value: string): string | undefined {
   try {
     url = new URL(trimmed);
   } catch {
-    return 'Enter a full URL, e.g. https://moodle-bridge.example.edu';
+    return 'Enter a full URL, e.g. https://ide-feedback-gateway.example.edu';
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return 'The URL must start with https://';

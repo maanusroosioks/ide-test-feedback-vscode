@@ -139,7 +139,7 @@ describe('runTests', () => {
     await runTests(registryWith(adapter), '/work', { logger, preferredAdapterId: 'fake' });
 
     expect(logger.messages).toContainEqual(
-      expect.stringMatching(/^Warning: moodleSubmit\.preferredAdapter forces Fake fake/),
+      expect.stringMatching(/^Warning: ideTestFeedback\.preferredAdapter forces Fake fake/),
     );
     expect(logger.messages).not.toContain('Detected adapter: Fake fake');
   });

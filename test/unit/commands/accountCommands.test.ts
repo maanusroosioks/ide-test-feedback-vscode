@@ -24,7 +24,7 @@ describe('login command', () => {
     const auth = fakeAuth();
     registerAccountCommands(asContext(fakeExtensionContext()), asAuth(auth));
 
-    await invokeCommand('moodleSubmit.login');
+    await invokeCommand('ideTestFeedback.login');
 
     expect(auth.login).toHaveBeenCalledOnce();
     expect(window.showInformationMessage).toHaveBeenCalledWith('Signed in with Microsoft.');
@@ -35,7 +35,7 @@ describe('login command', () => {
     auth.login.mockRejectedValue(new Error('User did not consent'));
     registerAccountCommands(asContext(fakeExtensionContext()), asAuth(auth));
 
-    await invokeCommand('moodleSubmit.login');
+    await invokeCommand('ideTestFeedback.login');
 
     expect(window.showErrorMessage).toHaveBeenCalledWith('Sign-in failed: User did not consent');
     expect(window.showInformationMessage).not.toHaveBeenCalled();
@@ -46,7 +46,7 @@ describe('login command', () => {
     auth.login.mockRejectedValue(new CancelledError());
     registerAccountCommands(asContext(fakeExtensionContext()), asAuth(auth));
 
-    await invokeCommand('moodleSubmit.login');
+    await invokeCommand('ideTestFeedback.login');
 
     expect(window.showErrorMessage).not.toHaveBeenCalled();
     expect(window.showInformationMessage).not.toHaveBeenCalled();
@@ -57,7 +57,7 @@ describe('logout command', () => {
   it('points the user at the Accounts menu to sign out', async () => {
     registerAccountCommands(asContext(fakeExtensionContext()), asAuth(fakeAuth()));
 
-    await invokeCommand('moodleSubmit.logout');
+    await invokeCommand('ideTestFeedback.logout');
 
     expect(window.showInformationMessage).toHaveBeenCalledOnce();
     expect(window.showInformationMessage.mock.calls[0][0]).toContain('Accounts menu');
@@ -68,7 +68,7 @@ describe('showOutput command', () => {
   it('reveals the output channel', async () => {
     registerShowOutputCommand(asContext(fakeExtensionContext()));
 
-    await invokeCommand('moodleSubmit.showOutput');
+    await invokeCommand('ideTestFeedback.showOutput');
 
     expect(getOutputChannel().show).toHaveBeenCalledOnce();
   });

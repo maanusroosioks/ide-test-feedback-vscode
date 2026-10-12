@@ -19,11 +19,11 @@ import {
 } from '../helpers/vscodeStub';
 
 describe('settings getters', () => {
-  it('read from the moodleSubmit section', () => {
+  it('read from the ideTestFeedback section', () => {
     configValues.set('serviceUrl', 'https://bridge.example.edu');
 
     expect(getServiceUrl()).toBe('https://bridge.example.edu');
-    expect(workspace.getConfiguration).toHaveBeenCalledWith('moodleSubmit');
+    expect(workspace.getConfiguration).toHaveBeenCalledWith('ideTestFeedback');
   });
 
   it('fall back to defaults when nothing is set', () => {
@@ -74,7 +74,7 @@ describe('folder-scoped settings', () => {
   ])("%s reads the folder's own value in a multi-root workspace", (_name, read) => {
     read();
 
-    expect(workspace.getConfiguration).toHaveBeenCalledWith('moodleSubmit', Uri.file('/work/api'));
+    expect(workspace.getConfiguration).toHaveBeenCalledWith('ideTestFeedback', Uri.file('/work/api'));
   });
 });
 

@@ -11,7 +11,7 @@ export interface SubmissionMetadata {
 export class MissingAssignmentKeyError extends MoodleSubmitError {
   constructor() {
     super(
-      'No assignmentKey configured. Add one via the "Moodle Submit: Configure Assignment" command, ' +
+      'No assignmentKey configured. Add one via the "IDE Test Feedback: Configure Assignment" command, ' +
         `or add a ${WORKSPACE_CONFIG_FILE_NAME} file to the project.`,
     );
   }

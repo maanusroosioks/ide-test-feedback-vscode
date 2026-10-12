@@ -35,7 +35,7 @@ export async function removeDir(path: string): Promise<void> {
 }
 
 export function makeReportDir(adapterId: string): Promise<string> {
-  return mkdtemp(join(resolve(tmpdir()), `moodle-submit-${adapterId}-`));
+  return mkdtemp(join(resolve(tmpdir()), `ide-test-feedback-${adapterId}-`));
 }
 
 export async function cleanupReport(path: string): Promise<void> {

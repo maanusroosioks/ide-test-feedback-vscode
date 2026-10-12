@@ -13,8 +13,8 @@ describe('createStatusReporter', () => {
     const { item } = createReporter();
 
     expect(window.createStatusBarItem).toHaveBeenCalledWith(StatusBarAlignment.Left, 100);
-    expect(item.command).toBe('moodleSubmit.showOutput');
-    expect(item.text).toBe('$(beaker) Moodle Submit');
+    expect(item.command).toBe('ideTestFeedback.showOutput');
+    expect(item.text).toBe('$(beaker) IDE Test Feedback');
     expect(item.show).toHaveBeenCalledOnce();
   });
 
@@ -49,12 +49,12 @@ describe('createStatusReporter', () => {
     const { reporter, item } = createReporter();
 
     reporter.error('Submission service returned 500');
-    expect(item.text).toBe('$(error) Moodle submit failed');
+    expect(item.text).toBe('$(error) IDE Test Feedback');
     expect(item.tooltip).toBe('Submission service returned 500');
     expect(item.backgroundColor).toEqual(new ThemeColor('statusBarItem.errorBackground'));
 
     reporter.idle();
-    expect(item.text).toBe('$(beaker) Moodle Submit');
+    expect(item.text).toBe('$(beaker) IDE Test Feedback');
     expect(item.tooltip).toBeUndefined();
     expect(item.backgroundColor).toBeUndefined();
   });

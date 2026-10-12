@@ -20,7 +20,7 @@ describe('getOutputChannel', () => {
 
     expect(first).toBe(second);
     expect(window.createOutputChannel).toHaveBeenCalledOnce();
-    expect(window.createOutputChannel).toHaveBeenCalledWith('Moodle Test Submit');
+    expect(window.createOutputChannel).toHaveBeenCalledWith('IDE Test Feedback');
   });
 });
 

@@ -18,7 +18,7 @@ export function registerAccountCommands(context: vscode.ExtensionContext, authSe
     // An extension can't end an authentication session; only the user can, from the Accounts menu.
     vscode.commands.registerCommand(COMMANDS.logout, async () => {
       await vscode.window.showInformationMessage(
-        'To sign out, open the Accounts menu (bottom-left of VS Code) and remove the Microsoft account used for Moodle Submit.',
+        'To sign out, open the Accounts menu (bottom-left of VS Code) and remove the Microsoft account used for IDE Test Feedback.',
       );
     }),
   );

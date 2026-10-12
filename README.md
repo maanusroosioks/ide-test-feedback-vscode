@@ -1,4 +1,4 @@
-# Moodle Test Submit
+# IDE Test Feedback for Moodle
 
 A VS Code extension that runs your project's unit tests and submits the results to
 Moodle. It detects the test framework, runs the suite, and posts a structured run to
@@ -13,7 +13,7 @@ account.
 - **Run-only mode** to check tests locally without submitting.
 - **Microsoft / Entra ID sign-in** via VS Code's built-in authentication — the
   extension stores no passwords or tokens.
-- **Per-project assignment keys** in a `.moodle-submit.json` that can ship with the starter code.
+- **Per-project assignment keys** in a `.ide-test-feedback.json` that can ship with the starter code.
 - **The source of each test is submitted with its result**, so your instructor sees the
   code behind every pass and fail.
 - Guided first-run setup, status-bar progress, and a dedicated output log.
@@ -21,15 +21,15 @@ account.
 ## Setup
 
 1. Install the extension.
-2. Run **Moodle Submit: Configure Assignment** and enter the submission service URL
-   your course provides (e.g. `https://moodle-bridge.example.edu`).
+2. Run **IDE Test Feedback: Configure Assignment** and enter the submission service URL
+   your course provides (e.g. `https://ide-feedback-gateway.example.edu`).
 3. Enter the project's assignment key when asked. It's saved to the project's
-   `.moodle-submit.json`; if your instructor's starter code already has one, just
+   `.ide-test-feedback.json`; if your instructor's starter code already has one, just
    confirm it.
 4. Sign in with Microsoft when prompted.
 5. Open a project with tests and run **Run Tests & Submit to Moodle**.
 
-### `.moodle-submit.json`
+### `.ide-test-feedback.json`
 
 Placed at the root of a workspace folder, and meant to be committed — an instructor can ship
 it with the starter code so students never type the key. It identifies the assignment and
@@ -48,7 +48,7 @@ a project without a key asks for one before the tests run.
 
 ## Test Explorer
 
-Your tests appear in VS Code's **Testing** view under **Moodle Tests**, read straight from
+Your tests appear in VS Code's **Testing** view under **IDE Test Feedback**, read straight from
 the source — no build or run needed. Each workspace folder lists its test files, then the
 classes and tests declared in them, and every test gets a pass/fail icon next to its
 declaration once it has run. The list follows your edits: a test appears as soon as you save
@@ -79,18 +79,18 @@ Current limitations:
   project that changes `python_files` still runs and submits normally; its other test files
   join the tree after the first run that reaches them, and follow your edits from then on.
 - If you also have the Java or Python test extensions installed, their controllers
-  appear alongside this one. Only **Moodle Tests** submits.
+  appear alongside this one. Only **IDE Test Feedback** submits.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| Moodle Submit: Run Tests & Submit to Moodle | Detect, run, parse, and submit. |
-| Moodle Submit: Run Tests (No Submit) | Detect, run, and parse only. |
-| Moodle Submit: Sign In with Microsoft | Start a Microsoft auth session. |
-| Moodle Submit: Sign Out | Explains how to remove the account from the Accounts menu. |
-| Moodle Submit: Configure Assignment | Set the service URL and the project's assignment key. |
-| Moodle Submit: Show Log | Reveal the output channel. |
+| IDE Test Feedback: Run Tests & Submit to Moodle | Detect, run, parse, and submit. |
+| IDE Test Feedback: Run Tests (No Submit) | Detect, run, and parse only. |
+| IDE Test Feedback: Sign In with Microsoft | Start a Microsoft auth session. |
+| IDE Test Feedback: Sign Out | Explains how to remove the account from the Accounts menu. |
+| IDE Test Feedback: Configure Assignment | Set the service URL and the project's assignment key. |
+| IDE Test Feedback: Show Log | Reveal the output channel. |
 
 ## What gets submitted
 
@@ -127,7 +127,7 @@ including whether the warning was shown. It's there to catch a test you accident
 emptied or left disabled.
 
 It never blocks a submission, and it can be switched off with
-`moodleSubmit.warnOnSuspiciousTests` — which silences the dialog but does not change what
+`ideTestFeedback.warnOnSuspiciousTests` — which silences the dialog but does not change what
 is sent.
 
 What your instructor reads is the test code itself, which is the thing worth reading.
@@ -152,33 +152,33 @@ always has a matching `testFiles` entry.
 ## Settings
 
 Settings cover your machine and preferences; what the assignment *is* lives in
-`.moodle-submit.json`.
+`.ide-test-feedback.json`.
 
 **Connection** — user settings only. A project's `.vscode/settings.json` cannot set these, so a
 cloned repository can't redirect where your sign-in token is sent.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `moodleSubmit.serviceUrl` | `""` | Base URL of the submission service. |
-| `moodleSubmit.authScopes` | `["User.Read"]` | OAuth scopes requested from the Microsoft provider. Change only for a different deployment. |
+| `ideTestFeedback.serviceUrl` | `""` | Base URL of the submission service. |
+| `ideTestFeedback.authScopes` | `["User.Read"]` | OAuth scopes requested from the Microsoft provider. Change only for a different deployment. |
 
-`moodleSubmit.requestTimeoutMs` (default `15000`, clamped to 1 000–120 000) sets the timeout for
+`ideTestFeedback.requestTimeoutMs` (default `15000`, clamped to 1 000–120 000) sets the timeout for
 requests to the service. It changes nothing about where the token goes, so a workspace may set it too.
 
 **Running tests** — can differ per folder.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `moodleSubmit.preferredAdapter` | – | Force `maven-junit`, `gradle-junit`, `pytest`, or `dotnet-test` instead of auto-detecting. |
-| `moodleSubmit.testCommandOverrides` | `{}` | Per-adapter command overrides, e.g. `{ "maven-junit": "mvn -Pci test" }`. |
+| `ideTestFeedback.preferredAdapter` | – | Force `maven-junit`, `gradle-junit`, `pytest`, or `dotnet-test` instead of auto-detecting. |
+| `ideTestFeedback.testCommandOverrides` | `{}` | Per-adapter command overrides, e.g. `{ "maven-junit": "mvn -Pci test" }`. |
 
 **Source capture** — can differ per folder.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `moodleSubmit.submitTestSource` | `true` | Submit the source of each test. Turning this off still submits where each test was found. |
-| `moodleSubmit.maxTotalSourceChars` | `500000` | Cap on the source captured per submission (at most 1 000 000). |
-| `moodleSubmit.warnOnSuspiciousTests` | `true` | Warn before submitting when tests look emptied or disabled. Never blocks. |
+| `ideTestFeedback.submitTestSource` | `true` | Submit the source of each test. Turning this off still submits where each test was found. |
+| `ideTestFeedback.maxTotalSourceChars` | `500000` | Cap on the source captured per submission (at most 1 000 000). |
+| `ideTestFeedback.warnOnSuspiciousTests` | `true` | Warn before submitting when tests look emptied or disabled. Never blocks. |
 
 ### Workspace trust
 

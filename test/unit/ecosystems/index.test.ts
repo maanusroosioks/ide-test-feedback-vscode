@@ -11,8 +11,8 @@ describe('ALL_ADAPTERS', () => {
   });
 
   it('matches the preferredAdapter setting offered in package.json', () => {
-    const setting = packageJson.contributes.configuration.find((section) => 'moodleSubmit.preferredAdapter' in section.properties)!
-      .properties['moodleSubmit.preferredAdapter'];
+    const setting = packageJson.contributes.configuration.find((section) => 'ideTestFeedback.preferredAdapter' in section.properties)!
+      .properties['ideTestFeedback.preferredAdapter'];
     expect(setting.enum).toEqual(ALL_ADAPTERS.map((adapter) => adapter.id));
   });
 
@@ -54,7 +54,7 @@ describe('ALL_ADAPTERS', () => {
 
     it('activates for no layout an adapter would not run, beyond the config file', () => {
       const unused = PATTERNS.filter(
-        (pattern) => pattern !== '.moodle-submit.json' && !LAYOUTS.some((file) => posix.matchesGlob(file, pattern)),
+        (pattern) => pattern !== '.ide-test-feedback.json' && !LAYOUTS.some((file) => posix.matchesGlob(file, pattern)),
       );
       expect(unused).toEqual([]);
     });

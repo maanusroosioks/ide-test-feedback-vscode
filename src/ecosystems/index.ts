@@ -31,7 +31,7 @@ type HostedLanguage = { [P in Platform]: keyof (typeof ECOSYSTEMS)[P]['languages
 
 /**
  * The first match wins when there is no picker. Each id must also be listed in
- * `moodleSubmit.preferredAdapter`'s enum in package.json — a unit test checks that.
+ * `ideTestFeedback.preferredAdapter`'s enum in package.json — a unit test checks that.
  */
 export const ALL_ADAPTERS: readonly TestRunnerAdapter[] = Object.values(ECOSYSTEMS).flatMap(
   (ecosystem) => ecosystem.adapters,

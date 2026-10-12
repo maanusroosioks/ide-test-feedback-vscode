@@ -2,12 +2,12 @@ import * as vscode from 'vscode';
 import type { CaptureOptions } from '../capture/evidence';
 
 function config(): vscode.WorkspaceConfiguration {
-  return vscode.workspace.getConfiguration('moodleSubmit');
+  return vscode.workspace.getConfiguration('ideTestFeedback');
 }
 
 /** For `resource`-scoped settings: without the folder, a multi-root workspace's per-folder values are skipped. */
 function folderConfig(folderPath: string | undefined): vscode.WorkspaceConfiguration {
-  return vscode.workspace.getConfiguration('moodleSubmit', folderPath ? vscode.Uri.file(folderPath) : undefined);
+  return vscode.workspace.getConfiguration('ideTestFeedback', folderPath ? vscode.Uri.file(folderPath) : undefined);
 }
 
 /** Defaults live here and in package.json; a non-numeric or non-positive setting falls back to them. */

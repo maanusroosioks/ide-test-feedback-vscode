@@ -32,7 +32,7 @@ function stubFetch(...outcomes: Array<Response | Error>): Mock {
 
 function client(overrides: Partial<{ baseUrl: string; token: () => Promise<string> }> = {}) {
   return new MoodleApiClient({
-    getBaseUrl: () => overrides.baseUrl ?? 'https://moodle-bridge.example.edu',
+    getBaseUrl: () => overrides.baseUrl ?? 'https://ide-feedback-gateway.example.edu',
     getTimeoutMs: () => 5000,
     getAccessToken: overrides.token ?? (async () => 'token-abc'),
   });
@@ -46,7 +46,7 @@ describe('MoodleApiClient', () => {
 
     expect(result).toEqual({ status: 200, body: { received: true } });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
-    expect(url).toBe('https://moodle-bridge.example.edu/api/v1/idetestfeedback/runs');
+    expect(url).toBe('https://ide-feedback-gateway.example.edu/api/v1/idetestfeedback/runs');
     expect(init.headers.Authorization).toBe('Bearer token-abc');
     expect(JSON.parse(init.body as string)).toEqual(samplePayload);
   });
@@ -105,7 +105,7 @@ describe('MoodleApiClient', () => {
     const getAccessToken = vi.fn(async () => 'token-abc');
 
     await expect(
-      client({ baseUrl: 'http://moodle-bridge.example.edu', token: getAccessToken }).submitResults(samplePayload),
+      client({ baseUrl: 'http://ide-feedback-gateway.example.edu', token: getAccessToken }).submitResults(samplePayload),
     ).rejects.toBeInstanceOf(InvalidServiceUrlError);
     expect(getAccessToken).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();

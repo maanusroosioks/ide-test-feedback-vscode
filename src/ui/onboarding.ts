@@ -4,18 +4,18 @@ import { serviceUrlProblem } from '../services/moodleApiClient';
 import { COMMANDS } from '../commands/ids';
 
 const WALKTHROUGH_ID = 'setup';
-const NUDGE_DISMISSED_KEY = 'moodleSubmit.onboardingDismissed';
+const NUDGE_DISMISSED_KEY = 'ideTestFeedback.onboardingDismissed';
 
 export function isConfigured(): boolean {
   return getServiceUrl().trim().length > 0;
 }
 
 /**
- * Keeps the `moodleSubmit.configured` context key in sync with settings so the
+ * Keeps the `ideTestFeedback.configured` context key in sync with settings so the
  * walkthrough's first step ticks itself off and `when` clauses can react.
  */
 export function refreshConfiguredContext(): void {
-  void vscode.commands.executeCommand('setContext', 'moodleSubmit.configured', isConfigured());
+  void vscode.commands.executeCommand('setContext', 'ideTestFeedback.configured', isConfigured());
 }
 
 export async function openSetupWalkthrough(context: vscode.ExtensionContext): Promise<void> {
@@ -32,7 +32,7 @@ export async function maybePromptOnboarding(context: vscode.ExtensionContext): P
   if (context.globalState.get<boolean>(NUDGE_DISMISSED_KEY)) return;
 
   const choice = await vscode.window.showInformationMessage(
-    'Moodle Test Submit needs a one-time setup before you can submit results.',
+    'IDE Test Feedback needs a one-time setup before you can submit results.',
     'Start setup',
     "Don't ask again",
   );

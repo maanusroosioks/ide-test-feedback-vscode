@@ -8,7 +8,7 @@ import {
 import { assignmentKeyProblem } from '../services/httpTypes';
 
 /**
- * Asks for the folder's key and saves it to its `.moodle-submit.json`. `false` if the user backed
+ * Asks for the folder's key and saves it to its `.ide-test-feedback.json`. `false` if the user backed
  * out or the file could not be written.
  */
 export async function promptAndSaveAssignmentKey(folder: vscode.WorkspaceFolder): Promise<boolean> {

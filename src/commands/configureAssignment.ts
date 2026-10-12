@@ -31,7 +31,7 @@ export function registerConfigureAssignmentCommand(
     vscode.commands.registerCommand(COMMANDS.configureAssignment, async () => {
       const serviceUrl = await vscode.window.showInputBox({
         prompt: 'Moodle submission service URL',
-        placeHolder: 'https://moodle-bridge.example.edu',
+        placeHolder: 'https://ide-feedback-gateway.example.edu',
         value: getServiceUrl(),
         ignoreFocusOut: true,
         validateInput: serviceUrlProblem,
@@ -61,7 +61,7 @@ export function registerConfigureAssignmentCommand(
 
       void vscode.window.showInformationMessage(
         keySaved
-          ? 'Moodle Submit configuration saved.'
+          ? 'IDE Test Feedback configuration saved.'
           : `Service URL saved. Add an assignment key to the project's ${WORKSPACE_CONFIG_FILE_NAME} before submitting.`,
       );
     }),

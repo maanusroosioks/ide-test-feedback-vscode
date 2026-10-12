@@ -29,7 +29,7 @@ function registerRunCommand(
   // menu; the palette and walkthrough pass nothing.
   return vscode.commands.registerCommand(commandId, async (target?: unknown) => {
     try {
-      await withProgress('Moodle Submit', async (progress) => {
+      await withProgress('IDE Test Feedback', async (progress) => {
         const folder = control.folderFor(target) ?? (await resolveWorkspaceFolder());
         await control.performRun({
           folder,
