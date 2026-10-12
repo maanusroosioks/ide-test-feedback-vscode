@@ -3,7 +3,7 @@
   "displayName": "Moodle Test Submit",
   "description": "Run your unit tests and submit the results to Moodle",
   "version": "0.1.0",
-  "publisher": "moodle-tools",
+  "publisher": "mroosioks",
   "license": "MIT",
   "repository": {
     "type": "git",
