@@ -2,7 +2,7 @@
   "name": "ide-test-feedback-vscode",
   "displayName": "IDE Test Feedback for Moodle",
   "description": "Run your unit tests and submit the results to Moodle",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "mroosioks",
   "license": "MIT",
   "repository": {
