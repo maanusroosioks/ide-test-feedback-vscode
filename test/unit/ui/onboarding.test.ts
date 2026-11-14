@@ -22,9 +22,16 @@ let context: FakeExtensionContext;
 
 beforeEach(() => {
   context = fakeExtensionContext();
+  // Unset means the built-in default, so a user who blanked the setting is the unconfigured case.
+  configValues.set('serviceUrl', '');
 });
 
 describe('isConfigured', () => {
+  it('is configured out of the box by the default service URL', () => {
+    configValues.delete('serviceUrl');
+    expect(isConfigured()).toBe(true);
+  });
+
   it('requires a non-blank service URL', () => {
     expect(isConfigured()).toBe(false);
     configValues.set('serviceUrl', '   ');

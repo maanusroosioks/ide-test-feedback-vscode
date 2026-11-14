@@ -16,7 +16,7 @@ interface PackageJson {
   activationEvents: string[];
   contributes: {
     commands: Array<{ command: string }>;
-    configuration: Array<{ properties: Record<string, { enum?: string[] }> }>;
+    configuration: Array<{ properties: Record<string, { enum?: string[]; default?: unknown }> }>;
   };
 }
 

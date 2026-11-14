@@ -765,7 +765,7 @@ describe('performRun — cancellation', () => {
 
 describe('performRun — submitting', () => {
   it('does nothing when the extension is not configured and the user backs out', async () => {
-    configValues.delete('serviceUrl');
+    configValues.set('serviceUrl', '');
     const { control, controller } = setup();
 
     await performRun(control, { submit: true });

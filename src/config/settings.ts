@@ -23,8 +23,9 @@ function boundedNumber(
   return Math.min(Math.max(Math.floor(value), min), max);
 }
 
+/** The default URL lives only in package.json; VS Code returns it when the user hasn't set one. */
 export function getServiceUrl(): string {
-  return config().get<string>('serviceUrl', '');
+  return config().get<string>('serviceUrl') ?? '';
 }
 
 export function getRequestTimeoutMs(): number {

@@ -27,7 +27,7 @@ describe('settings getters', () => {
   });
 
   it('fall back to defaults when nothing is set', () => {
-    expect(getServiceUrl()).toBe('');
+    expect(getServiceUrl()).toMatch(/^https:\/\//);
     expect(getRequestTimeoutMs()).toBe(15000);
     expect(getAuthScopes()).toEqual(['User.Read']);
     expect(getTestCommandOverrides()).toEqual({});

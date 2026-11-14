@@ -4,6 +4,7 @@
 
 import { vi, type Mock } from 'vitest';
 import type * as vscode from 'vscode';
+import { packageJson } from './project';
 
 const resetters: Array<() => void> = [];
 
@@ -222,6 +223,13 @@ export class FakeTestController {
 
 /** Backs `workspace.getConfiguration(...).get`; keys are unprefixed, e.g. `serviceUrl`. */
 export const configValues = new Map<string, unknown>();
+
+/** Like VS Code, an unset key falls back to its package.json default before the caller's fallback. */
+const contributedDefaults = new Map(
+  packageJson.contributes.configuration.flatMap((section) =>
+    Object.entries(section.properties).map(([key, schema]) => [key.replace(/^ideTestFeedback\./, ''), schema.default]),
+  ),
+);
 export const configUpdate = stubFn(async (_key: string, _value: unknown, _target?: ConfigurationTarget) => {});
 
 /** Handlers passed to `commands.registerCommand`, by command id. */
@@ -335,7 +343,7 @@ export const workspace = {
   onDidOpenTextDocument: stubFn((_listener: (document: { uri: Uri }) => void) => disposable()),
   getConfiguration: stubFn((_section?: string, _scope?: Uri) => ({
     get: <T>(key: string, fallback?: T): T | undefined =>
-      configValues.has(key) ? (configValues.get(key) as T) : fallback,
+      configValues.has(key) ? (configValues.get(key) as T) : ((contributedDefaults.get(key) as T | undefined) ?? fallback),
     update: configUpdate,
   })),
   getWorkspaceFolder: stubFn((_uri: Uri): vscode.WorkspaceFolder | undefined => undefined),

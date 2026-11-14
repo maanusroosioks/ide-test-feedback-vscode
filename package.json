@@ -102,8 +102,8 @@
         "properties": {
           "ideTestFeedback.serviceUrl": {
             "type": "string",
-            "default": "",
-            "description": "Base URL of the submission service (e.g. https://ide-feedback-gateway.example.edu). Can only be set in user settings, so a project cannot redirect where your sign-in token is sent.",
+            "default": "https://moodle-hggbhmegescmczf9.swedencentral-01.azurewebsites.net",
+            "description": "Base URL of the submission service. Can only be set in user settings, so a project cannot redirect where your sign-in token is sent.",
             "scope": "machine"
           },
           "ideTestFeedback.authScopes": {

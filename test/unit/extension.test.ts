@@ -53,6 +53,7 @@ describe('activate', () => {
   });
 
   it('publishes the configured state and keeps it in sync with the service URL', () => {
+    configValues.set('serviceUrl', '');
     activate(asContext(fakeExtensionContext()));
     expect(contextKeyUpdates()).toEqual([false]);
 
@@ -64,7 +65,8 @@ describe('activate', () => {
     expect(contextKeyUpdates()).toEqual([false, true]);
   });
 
-  it('nudges an unconfigured install towards setup', () => {
+  it('nudges towards setup when the service URL was cleared', () => {
+    configValues.set('serviceUrl', '');
     activate(asContext(fakeExtensionContext()));
 
     expect(window.showInformationMessage).toHaveBeenCalledWith(
@@ -74,9 +76,7 @@ describe('activate', () => {
     );
   });
 
-  it('stays quiet once configured', () => {
-    configValues.set('serviceUrl', 'https://bridge.example.edu');
-
+  it('stays quiet with the default service URL', () => {
     activate(asContext(fakeExtensionContext()));
 
     expect(window.showInformationMessage).not.toHaveBeenCalled();

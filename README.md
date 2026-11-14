@@ -21,8 +21,8 @@ account.
 ## Setup
 
 1. Install the extension.
-2. Run **IDE Test Feedback: Configure Assignment** and enter the submission service URL
-   your course provides (e.g. `https://ide-feedback-gateway.example.edu`).
+2. Run **IDE Test Feedback: Configure Assignment**. The submission service URL is pre-filled
+   with the default service; change it only if your course uses a different one.
 3. Enter the project's assignment key when asked. It's saved to the project's
    `.ide-test-feedback.json`; if your instructor's starter code already has one, just
    confirm it.
@@ -159,7 +159,7 @@ cloned repository can't redirect where your sign-in token is sent.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `ideTestFeedback.serviceUrl` | `""` | Base URL of the submission service. |
+| `ideTestFeedback.serviceUrl` | `https://moodle-hggbhmegescmczf9.swedencentral-01.azurewebsites.net` | Base URL of the submission service. |
 | `ideTestFeedback.authScopes` | `["User.Read"]` | OAuth scopes requested from the Microsoft provider. Change only for a different deployment. |
 
 `ideTestFeedback.requestTimeoutMs` (default `15000`, clamped to 1 000–120 000) sets the timeout for

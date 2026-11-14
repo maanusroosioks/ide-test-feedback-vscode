@@ -6,8 +6,8 @@ a project belongs to.
 
 Run **IDE Test Feedback: Configure Assignment** to set:
 
-- **Service URL**: the base URL your instructor gave you
-  (e.g. `https://ide-feedback-gateway.example.edu`). It's saved to your user settings,
+- **Service URL**: pre-filled with the default service. Change it only if your
+  instructor gave you a different one. It's saved to your user settings,
   so it applies to every project.
 - **Assignment key**: saved to the open project's `.ide-test-feedback.json`. If your
   instructor's starter code already has one, just confirm it.
